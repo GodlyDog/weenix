@@ -204,11 +204,12 @@ proc_t *proc_create(const char *name)
     proc->p_pml4 = page;
     proc->p_state = PROC_RUNNING;
     proc->p_pproc = curproc;
-    list_insert_head(&curproc->p_children, &proc->p_child_link);
     list_init(&proc->p_children);
     list_init(&proc->p_threads);
     list_link_init(&proc->p_list_link);
     list_link_init(&proc->p_child_link);
+    sched_queue_init(&proc->p_wait);
+    list_insert_head(&curproc->p_children, &proc->p_child_link);
     sched_queue_init(&proc->p_wait);
     spinlock_lock(&proc_list_lock);
     list_insert_head(&proc_list, &proc->p_list_link);
@@ -235,7 +236,7 @@ proc_t *proc_create(const char *name)
  */
 void proc_cleanup(long status)
 {
-    dbg(DBG_TEST, "\nCleaning exited child process\n");
+
     curproc->p_status = status;
     curproc->p_state = PROC_DEAD;
     if (curproc->p_pid == PID_INIT) {
@@ -264,7 +265,6 @@ void proc_cleanup(long status)
  */
 void proc_thread_exiting(void *retval)
 {
-    dbg(DBG_TEST, "\nProcess exiting\n");
     proc_cleanup((long)retval);
     curthr->kt_retval = retval;
     curthr->kt_state = KT_EXITED;
@@ -402,7 +402,6 @@ pid_t do_waitpid(pid_t pid, int *status, int options) {
                     *status = ch->p_status;
                     pid_t child_pid = ch->p_pid;
                     list_remove(&ch->p_child_link);
-                    list_remove(&ch->p_list_link);
                     proc_destroy(ch);
                     return child_pid;
                 }
@@ -412,13 +411,11 @@ pid_t do_waitpid(pid_t pid, int *status, int options) {
     } else if (pid == -1) {
         while (1) {
             dbg(DBG_TEST, "\nPage fault now!\n");
-            list_iterate(&curproc->p_children, child, proc_t, p_child_link)
-            {
+            list_iterate(&curproc->p_children, child, proc_t, p_child_link) {
                 if (child->p_state == PROC_DEAD) {
                     *status = child->p_status;
                     pid_t child_pid = child->p_pid;
                     list_remove(&child->p_child_link);
-                    list_remove(&child->p_list_link);
                     proc_destroy(child);
                     return child_pid;
                 }
