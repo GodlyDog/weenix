@@ -80,9 +80,11 @@ static void ktqueue_enqueue(ktqueue_t *queue, kthread_t *thr)
     list_assert_sanity(&queue->tq_list);
     /* Because of the way core-specific data is handled, we add to the front
      *  of the queue (and remove from the back). */
+    dbg(DBG_TEST, "\nInserting\n");
     list_insert_head(&queue->tq_list, &thr->kt_qlink);
+    dbg(DBG_TEST, "\nInserted\n");
     list_assert_sanity(&queue->tq_list);
-
+    dbg(DBG_TEST, "\nSane\n");
     thr->kt_wchan = queue;
     queue->tq_size++;
 }
@@ -119,7 +121,7 @@ static kthread_t *ktqueue_dequeue(ktqueue_t *queue)
  */
 static void ktqueue_remove(ktqueue_t *queue, kthread_t *thr)
 {
-    // KASSERT(spinlock_ownslock(&queue->tq_lock));
+    //KASSERT(spinlock_ownslock(&queue->tq_lock));
     KASSERT(thr->kt_qlink.l_next && thr->kt_qlink.l_prev);
     list_remove(&thr->kt_qlink);
     thr->kt_wchan = NULL;
@@ -163,7 +165,15 @@ void sched_init(void)
  */
 long sched_cancellable_sleep_on(ktqueue_t *queue, spinlock_t *lock)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_cancellable_sleep_on");
+    // spinlocks?
+    curthr -> kt_state = KT_SLEEP_CANCELLABLE;
+    if (curthr -> kt_cancelled) {
+        return EINTR;
+    }
+    sched_switch(queue, lock);
+    if (curthr -> kt_cancelled) {
+        return EINTR;
+    }
     return 0;
 }
 
@@ -175,7 +185,13 @@ long sched_cancellable_sleep_on(ktqueue_t *queue, spinlock_t *lock)
  */
 void sched_cancel(kthread_t *thr)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_cancel");
+    spinlock_lock(&thr->kt_lock);
+    thr -> kt_cancelled = 1;
+    if (thr -> kt_state == KT_SLEEP_CANCELLABLE) {
+        list_remove(&thr -> kt_qlink);
+        thr -> kt_state = KT_RUNNABLE;
+    }
+    spinlock_unlock(&thr->kt_lock);
 }
 
 /*
@@ -185,7 +201,7 @@ void sched_cancel(kthread_t *thr)
  * 
  * We want to switch to the current core because the idle process handles the
  * actual switching of the threads. Please see section 3.3 Boot Sequence to 
- * find a more in depth explantion about the idle process and its
+ * find a more in depth explanation about the idle process and its
  * relationship with core_switch().
  *
  * Hints:
@@ -208,7 +224,16 @@ void sched_cancel(kthread_t *thr)
  */
 void sched_switch(ktqueue_t *queue, spinlock_t *lock)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_switch");
+    // runq locked before calling sched_switch
+    // runq unlocked in core switch (activated by the context switch)
+    KASSERT(curthr->kt_state != KT_ON_CPU);
+    intr_disable();
+    uint8_t current_ipl = intr_setipl(IPL_LOW);
+    curcore.kc_queue = queue;
+    curcore.kc_lock = lock;
+    context_switch(&curthr->kt_ctx, &curcore.kc_ctx);
+    intr_setipl(current_ipl);
+    intr_enable();
 }
 
 /*
@@ -236,7 +261,16 @@ void sched_yield()
  */
 void sched_make_runnable(kthread_t *thr)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_make_runnable");
+    KASSERT(thr != curthr);
+    uint8_t current_ipl = intr_getipl();
+    intr_setipl(IPL_HIGH);
+    spinlock_lock(&thr->kt_lock);
+    spinlock_lock(&kt_runq.tq_lock);
+    thr->kt_state = KT_RUNNABLE;
+    ktqueue_enqueue(&kt_runq, thr);
+    spinlock_unlock(&thr->kt_lock);
+    spinlock_unlock(&kt_runq.tq_lock);
+    intr_setipl(current_ipl);
 }
 
 /*
@@ -255,7 +289,16 @@ void sched_make_runnable(kthread_t *thr)
  */
 void sched_sleep_on(ktqueue_t *q, spinlock_t *lock)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_sleep_on");
+    KASSERT(q != NULL);
+    KASSERT(lock != NULL);
+    uint8_t current_ipl = intr_getipl();
+    intr_setipl(IPL_HIGH);
+    spinlock_lock(&curthr->kt_lock);
+    curthr->kt_state = KT_SLEEP;
+    dbg(DBG_TEST, "\nSleep switching\n");
+    sched_switch(q, lock);
+    dbg(DBG_TEST, "\nSleep returned from switch\n");
+    intr_setipl(current_ipl);
 }
 
 /*
@@ -271,7 +314,18 @@ void sched_sleep_on(ktqueue_t *q, spinlock_t *lock)
  */
 void sched_wakeup_on(ktqueue_t *q, kthread_t **ktp)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_wakeup_on");
+    spinlock_lock(&q->tq_lock);
+    dbg(DBG_TEST, "\ndequeue\n");
+    kthread_t* thread = ktqueue_dequeue(q);
+    dbg(DBG_TEST, "\nfinished dequeue\n");
+    spinlock_unlock(&q->tq_lock);
+    if (thread == NULL) {
+        return;
+    }
+    if (ktp != NULL) {
+        *ktp = thread;
+    }
+    sched_make_runnable(thread);
 }
 
 /*
@@ -279,7 +333,13 @@ void sched_wakeup_on(ktqueue_t *q, kthread_t **ktp)
  */
 void sched_broadcast_on(ktqueue_t *q)
 {
-    NOT_YET_IMPLEMENTED("PROCS: sched_broadcast_on");
+    KASSERT(q != NULL);
+    spinlock_lock(&q->tq_lock);
+    kthread_t* thread;
+    while ((thread = ktqueue_dequeue(q)) != NULL) {
+        sched_make_runnable(thread);
+    }
+    spinlock_unlock(&q->tq_lock);
 }
 
 /*===============
@@ -319,7 +379,7 @@ static inline kthread_t *load_balance()
  *  1) perform the operations on curcore.kc_queue and curcore.kc_lock
  *  2) set curproc to idleproc, and curthr to NULL
  *  3) try to get the next thread to run
- *     a) try to use your oqn runq (kt_runq), which is core-specific data
+ *     a) try to use your own runq (kt_runq), which is core-specific data
  *     b) if, using core_uptime(), at least LOAD_BALANCING_IDLE_THRESHOLD have
  * passed, then call load_balance() to try to get the next thread to run c) if
  * neither (a) nor (b) work, the core is idle. Wait for an interrupt using
@@ -337,7 +397,9 @@ void core_switch()
 
         if (curcore.kc_queue)
         {
+            dbg(DBG_TEST, "\nEnqueuing\n");
             ktqueue_enqueue(curcore.kc_queue, curthr);
+            dbg(DBG_TEST, "\nEnqueued\n");
             spinlock_unlock(&curcore.kc_queue->tq_lock);
         }
         if (curcore.kc_lock)

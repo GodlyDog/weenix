@@ -161,6 +161,7 @@ static void *initproc_run(long arg1, void *arg2)
     vfs_init();
     make_devices();
 #endif
+    proctest_main(0, NULL);
     return NULL;
 }
 
@@ -178,7 +179,11 @@ static void *initproc_run(long arg1, void *arg2)
  */
 void initproc_start()
 {
-    NOT_YET_IMPLEMENTED("PROCS: initproc_start");
+    proc_t* init_process = proc_create("init");
+    // put kassertions about the validity of the output of proc_create here
+    kthread_t* thread = kthread_create(init_process, &initproc_run, 0, NULL);
+    sched_make_runnable(thread);
+    context_make_active(&curcore.kc_ctx);
 }
 
 void initproc_finish()

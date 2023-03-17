@@ -68,8 +68,29 @@ void kthread_init()
 kthread_t *kthread_create(proc_t *proc, kthread_func_t func, long arg1,
                           void *arg2)
 {
-    NOT_YET_IMPLEMENTED("PROCS: kthread_create");
-    return NULL;
+    KASSERT(proc != NULL);
+    KASSERT(func != NULL);
+    kthread_t* thread = (kthread_t*) slab_obj_alloc(kthread_allocator);
+    if (thread == NULL) {
+        return NULL;
+    }
+    char* stack = alloc_stack();
+    context_setup(&thread->kt_ctx, func, arg1, arg2, stack, DEFAULT_STACK_SIZE, proc->p_pml4);
+    thread->kt_kstack = stack;
+    thread->kt_state = KT_NO_STATE;
+    list_link_init(&thread->kt_plink);
+    list_insert_tail(&proc->p_threads, &thread->kt_plink);
+    thread->kt_recent_core = ~0UL;
+    thread->kt_errno = 0;
+    thread->kt_proc = proc;
+    thread->kt_cancelled = 0;
+    // thread->kt_wchan not initialized here
+    spinlock_init(&thread->kt_lock);
+    list_link_init(&thread->kt_qlink);
+    thread->kt_wchan = NULL;
+    spinlock_init(&thread->kt_lock);
+    thread->kt_preemption_count = 0;
+    return thread;
 }
 
 /*
@@ -126,7 +147,11 @@ void kthread_destroy(kthread_t *thr)
  */
 void kthread_cancel(kthread_t *thr, void *retval)
 {
-    NOT_YET_IMPLEMENTED("PROCS: kthread_cancel");
+    KASSERT(thr != curthr);
+    spinlock_lock(&thr->kt_lock);
+    thr -> kt_retval = retval;
+    spinlock_unlock(&thr->kt_lock);
+    sched_cancel(thr);
 }
 
 /*
@@ -134,5 +159,6 @@ void kthread_cancel(kthread_t *thr, void *retval)
  */
 void kthread_exit(void *retval)
 {
-    NOT_YET_IMPLEMENTED("PROCS: kthread_exit");
+    curthr->kt_retval = retval;
+    proc_thread_exiting(retval);
 }

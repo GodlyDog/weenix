@@ -185,8 +185,35 @@ proc_t *proc_lookup(pid_t pid)
  */
 proc_t *proc_create(const char *name)
 {
-    NOT_YET_IMPLEMENTED("PROCS: proc_create");
-    return NULL;
+    if (strlen(name) > PROC_NAME_LEN) {
+        return NULL;
+    }
+    pid_t pid = _proc_getid();
+    proc_t* proc = (proc_t*) slab_obj_alloc(proc_allocator);
+    if (proc == NULL) {
+        return NULL;
+    }
+    pml4_t* page = pt_create();
+    if (pid == PID_INIT) {
+        proc_initproc = proc;
+    }
+    proc->p_pid = pid;
+    for (long unsigned int i = 0; i < strlen(name); i++) {
+        proc->p_name[i] = name[i];
+    }
+    proc->p_pml4 = page;
+    proc->p_state = PROC_RUNNING;
+    proc->p_pproc = curproc;
+    list_insert_head(&curproc->p_children, &proc->p_child_link);
+    list_init(&proc->p_children);
+    list_init(&proc->p_threads);
+    list_link_init(&proc->p_list_link);
+    list_link_init(&proc->p_child_link);
+    sched_queue_init(&proc->p_wait);
+    spinlock_lock(&proc_list_lock);
+    list_insert_head(&proc_list, &proc->p_list_link);
+    spinlock_unlock(&proc_list_lock);
+    return proc;
 }
 
 /*
@@ -208,7 +235,18 @@ proc_t *proc_create(const char *name)
  */
 void proc_cleanup(long status)
 {
-    NOT_YET_IMPLEMENTED("PROCS: proc_cleanup");
+    dbg(DBG_TEST, "\nCleaning exited child process\n");
+    curproc->p_status = status;
+    curproc->p_state = PROC_DEAD;
+    if (curproc->p_pid == PID_INIT) {
+        initproc_finish();
+    } else {
+        list_iterate(&curproc->p_children, child, proc_t, p_child_link) {
+            list_remove(&child->p_child_link);
+            list_insert_head(&proc_initproc->p_children, &child->p_child_link);
+            child->p_pproc = proc_initproc;
+        }
+    }
 }
 
 /*
@@ -226,7 +264,12 @@ void proc_cleanup(long status)
  */
 void proc_thread_exiting(void *retval)
 {
-    NOT_YET_IMPLEMENTED("PROCS: proc_thread_exiting");
+    dbg(DBG_TEST, "\nProcess exiting\n");
+    proc_cleanup((long)retval);
+    curthr->kt_retval = retval;
+    curthr->kt_state = KT_EXITED;
+    sched_broadcast_on(&curproc->p_pproc->p_wait);
+    sched_switch(0, 0);
 }
 
 /*
@@ -237,7 +280,10 @@ void proc_thread_exiting(void *retval)
  */
 void proc_kill(proc_t *proc, long status)
 {
-    NOT_YET_IMPLEMENTED("PROCS: proc_kill");
+    KASSERT(proc != curproc);
+    list_iterate(&proc->p_threads, thread, kthread_t, kt_plink) {
+        kthread_cancel(thread, &status); // not sure on status
+    }
 }
 
 /*
@@ -251,7 +297,15 @@ void proc_kill(proc_t *proc, long status)
  */
 void proc_kill_all()
 {
-    NOT_YET_IMPLEMENTED("PROCS: proc_kill_all");
+    spinlock_lock(&proc_list_lock);
+    list_iterate(&proc_list, p, proc_t, p_list_link) {
+        proc_t* parent = list_item(&p->p_child_link, proc_t, p_child_link);
+        if (p->p_pid != curproc->p_pid && parent->p_pid != PID_IDLE) {
+            proc_kill(p, -1);
+        }
+    }
+    spinlock_unlock(&proc_list_lock);
+    do_exit(-1);
 }
 
 /*
@@ -325,10 +379,54 @@ void proc_destroy(proc_t *proc)
  * If waiting on any child (-1), do_waitpid can return when *any* child has exited,
  * it does not have to return the one that exited earliest.
  */
-pid_t do_waitpid(pid_t pid, int *status, int options)
-{
-    NOT_YET_IMPLEMENTED("PROCS: do_waitpid");
-    return 0;
+pid_t do_waitpid(pid_t pid, int *status, int options) {
+    if (pid == 0 || pid < -1 || options) {
+        return -ENOTSUP;
+    }
+    spinlock_lock(&curproc->p_children_lock);
+    dbg(DBG_TEST, "\nChecking list empty\n");
+    if (pid == -1 && list_empty(&curproc->p_children)) {
+        spinlock_unlock(&curproc->p_children_lock);
+        return -ECHILD;
+    }
+    if (pid > 0) {
+        list_iterate(&curproc->p_children, ch, proc_t, p_child_link) {
+            if (ch->p_pid == pid) {
+                if (ch->p_state == PROC_DEAD) {
+                    *status = ch->p_status;
+                    proc_destroy(ch);
+                } else {
+                    while (ch->p_state != PROC_DEAD) {
+                        sched_sleep_on(&curproc->p_wait, &curproc->p_children_lock);
+                    }
+                    *status = ch->p_status;
+                    pid_t child_pid = ch->p_pid;
+                    list_remove(&ch->p_child_link);
+                    list_remove(&ch->p_list_link);
+                    proc_destroy(ch);
+                    return child_pid;
+                }
+            }
+        }
+        return -ECHILD;
+    } else if (pid == -1) {
+        while (1) {
+            dbg(DBG_TEST, "\nPage fault now!\n");
+            list_iterate(&curproc->p_children, child, proc_t, p_child_link)
+            {
+                if (child->p_state == PROC_DEAD) {
+                    *status = child->p_status;
+                    pid_t child_pid = child->p_pid;
+                    list_remove(&child->p_child_link);
+                    list_remove(&child->p_list_link);
+                    proc_destroy(child);
+                    return child_pid;
+                }
+            }
+            sched_sleep_on(&curproc->p_wait, &curproc->p_children_lock);
+        }
+    }
+    return -ENOTSUP;
 }
 
 /*
@@ -336,7 +434,8 @@ pid_t do_waitpid(pid_t pid, int *status, int options)
  */
 void do_exit(long status)
 {
-    NOT_YET_IMPLEMENTED("PROCS: do_exit");
+    curproc->p_status = status;
+    kthread_exit(&status); // (void*) status ?
 }
 
 /*==========

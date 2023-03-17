@@ -39,14 +39,13 @@ typedef struct kthread
     struct proc *kt_proc; /* Corresponding process */
 
     long kt_cancelled;   /* Set if the thread has been cancelled */
-    ktqueue_t *kt_wchan; /* If blocking, the queue this thread is blocked on */
+    ktqueue_t *kt_wchan; /* If blocking, the queue this thread is blocked on  NULL*/
     kthread_state_t kt_state;
 
     spinlock_t kt_lock;
 
-    list_link_t kt_plink; /* Link on the process's thread list, p_threads */
-    list_link_t
-        kt_qlink; /* Link on some ktqueue if the thread is not running */
+    list_link_t kt_plink; /* Link on the process's thread list, p_threads  processor link */
+    list_link_t kt_qlink; /* Link on some ktqueue if the thread is not running  NULL */
 
     list_t kt_mutexes;   /* List of owned mutexes, for use in debugging */
     long kt_recent_core; /* For SMP */

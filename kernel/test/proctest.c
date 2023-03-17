@@ -18,6 +18,7 @@
 void *test_func(long arg1, void *arg2)
 {
     proc_t *proc_as_arg = (proc_t *)arg2;
+    dbg(DBG_TEST, "\nTest function running\n");
     test_assert(arg1 == proc_as_arg->p_pid, "Arguments are not set up correctly");
     test_assert(proc_as_arg->p_state == PROC_RUNNING, "Process state is not running");
     test_assert(list_empty(&proc_as_arg->p_children), "There should be no child processes");
@@ -34,11 +35,13 @@ void test_termination()
 
     int count = 0;
     int status;
-    while (do_waitpid(-1, &status, 0) != -ECHILD)
-    {
+    dbg(DBG_TEST, "\nWaitpid calling\n");
+    while (do_waitpid(-1, &status, 0) != -ECHILD) {
+        dbg(DBG_TEST, "\nNot ECHILD\n");
         test_assert(status == 0, "Returned status not set correctly");
         count++;
     }
+    dbg(DBG_TEST, "\nReturned ECHILD\n");
     test_assert(count == num_procs_created,
                 "Expected: %d, Actual: %d number of processes have been cleaned up\n", num_procs_created, count);
 }
@@ -47,6 +50,7 @@ long proctest_main(long arg1, void *arg2)
 {
     dbg(DBG_TEST, "\nStarting Procs tests\n");
     test_init();
+    dbg(DBG_TEST, "\nStarting termination tests\n");
     test_termination();
 
     // Add more tests here!
