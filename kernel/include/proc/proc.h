@@ -107,6 +107,9 @@ proc_t *proc_create(const char *name);
  */
 void proc_destroy(proc_t *proc);
 
+
+proc_t *proc_lookup(pid_t pid);
+
 /**
  * Handles exiting the current process.
  *

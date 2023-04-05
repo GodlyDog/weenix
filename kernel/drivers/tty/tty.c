@@ -72,8 +72,21 @@ void tty_init()
  */
 ssize_t tty_read(chardev_t *cdev, size_t pos, void *buf, size_t count)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: tty_read");
-    return -1;
+    // QUESTION: kmutex locking causes general protection fault?
+    tty_t* tty = cd_to_tty(cdev);
+    spinlock_lock(&tty->tty_lock);
+    uint8_t current_ipl = intr_setipl(INTR_KEYBOARD);
+
+    long stat = ldisc_wait_read(&tty->tty_ldisc, &tty->tty_lock);
+    if (stat < 0) {
+        intr_setipl(current_ipl);
+        spinlock_unlock(&tty->tty_lock);
+        return stat;
+    }
+    ssize_t num_read = ldisc_read(&tty->tty_ldisc, buf, count);
+    intr_setipl(current_ipl);
+    spinlock_unlock(&tty->tty_lock);
+    return num_read;
 }
 
 /**
@@ -91,8 +104,13 @@ ssize_t tty_read(chardev_t *cdev, size_t pos, void *buf, size_t count)
  */
 ssize_t tty_write(chardev_t *cdev, size_t pos, const void *buf, size_t count)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: tty_write");
-    return -1;
+    // QUESTION: kmutex locking causes general protection fault?
+    tty_t* tty = cd_to_tty(cdev);
+    uint8_t current_ipl = intr_getipl();
+    intr_setipl(INTR_KEYBOARD);
+    size_t written = vterminal_write(&tty->tty_vterminal, buf, count);
+    intr_setipl(current_ipl);
+    return written;
 }
 
 static void tty_receive_char_multiplexer(uint8_t c)

@@ -26,8 +26,33 @@
  */
 ssize_t do_read(int fd, void *buf, size_t len)
 {
-    NOT_YET_IMPLEMENTED("VFS: do_read");
-    return -1;
+    if (fd > NFILES) {
+        return -EBADF;
+    }
+    file_t* file = fget(fd);
+    if (!file) {
+        return -EBADF;
+    }
+    if (!(FMODE_READ & file->f_mode)) {
+        fput(&file);
+        return -EBADF;
+    }
+    vnode_t *node = file->f_vnode;
+    vlock(node);
+    if (S_ISDIR(node->vn_mode)) {
+        fput(&file);
+        vunlock(node);
+        return -EISDIR;
+    }
+    ssize_t num_read = node->vn_ops->read(node, file->f_pos, buf, len);
+    vunlock(node);
+    if (num_read < 0) {
+        fput(&file);
+        return num_read;
+    }
+    file->f_pos = file->f_pos + num_read;
+    fput(&file);
+    return num_read;
 }
 
 /*
@@ -36,7 +61,7 @@ ssize_t do_read(int fd, void *buf, size_t len)
  *
  * Return the number of bytes written on success, or:
  *  - EBADF: fd is invalid or is not open for writing
- *  - Propagate errors from the vnode operation read
+ *  - Propagate errors from the vnode operation write
  *
  * Hints:
  *  - Check out `man 2 write` for details about how to handle the FMODE_APPEND
@@ -46,8 +71,32 @@ ssize_t do_read(int fd, void *buf, size_t len)
  */
 ssize_t do_write(int fd, const void *buf, size_t len)
 {
-    NOT_YET_IMPLEMENTED("VFS: do_write");
-    return -1;
+    if (fd > NFILES) {
+        return -EBADF;
+    }
+    file_t* file = fget(fd);
+    if (!file) {
+        return -EBADF;
+    }
+    if (!(FMODE_WRITE & file->f_mode)) {
+        fput(&file);
+        return -EBADF;
+    }
+    vnode_t *node = file->f_vnode;
+    vlock(node);
+    if (FMODE_APPEND & file->f_mode) {
+        file->f_pos = node->vn_len;
+    }
+    ssize_t num_written = node->vn_ops->write(node, file->f_pos, buf, len);
+    if (num_written < 0) {
+        fput(&file);
+        vunlock(node);
+        return num_written;
+    }
+    file->f_pos = file->f_pos + num_written;
+    fput(&file);
+    vunlock(node);
+    return num_written;
 }
 
 /*
@@ -63,8 +112,15 @@ ssize_t do_write(int fd, const void *buf, size_t len)
  */
 long do_close(int fd)
 {
-    NOT_YET_IMPLEMENTED("VFS: do_close");
-    return -1;
+    if (fd > NFILES) {
+        return -EBADF;
+    }
+    if (!curproc->p_files[fd]) {
+        return -EBADF;
+    }
+    fput(&curproc->p_files[fd]);
+    curproc->p_files[fd] = NULL;
+    return 0;
 }
 
 /*
@@ -78,8 +134,24 @@ long do_close(int fd)
  */
 long do_dup(int fd)
 {
-    NOT_YET_IMPLEMENTED("VFS: do_dup");
-    return -1;
+    int new_fd;
+    long status = get_empty_fd(&new_fd);
+    if (status < 0) {
+        return status;
+    }
+    file_t* file = fget(fd);
+    if (!file) {
+        fput(&file);
+        return -EBADF;
+    }
+    if (!file->f_mode) {
+        fput(&file);
+        return -EBADF;
+    }
+    curproc->p_files[fd] = NULL;
+    curproc->p_files[new_fd] = file;
+    fput(&file);
+    return 0;
 }
 
 /*
@@ -94,8 +166,25 @@ long do_dup(int fd)
  */
 long do_dup2(int ofd, int nfd)
 {
-    NOT_YET_IMPLEMENTED("VFS: do_dup2");
-    return -1;
+    file_t* file = fget(ofd);
+    if (!file) {
+        fput(&file);
+        return -EBADF;
+    }
+    if (!file->f_mode) {
+        fput(&file);
+        return -EBADF;
+    }
+    file_t *inval = fget(nfd);
+    if (inval) {
+        fput(&inval);
+        fput(&file);
+        return -EBADF;
+    }
+    curproc->p_files[ofd] = NULL;
+    curproc->p_files[nfd] = file;
+    fput(&file);
+    return 0;
 }
 
 /*

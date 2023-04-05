@@ -62,6 +62,29 @@ long get_empty_fd(int *fd)
  */
 long do_open(const char *filename, int oflags)
 {
-    NOT_YET_IMPLEMENTED("VFS: do_open");
+    // check flags
+    int fd;
+    long fd_status = get_empty_fd(&fd);
+    if (fd_status < 0) {
+        return fd_status;
+    }
+    vnode_t* res_vnode;
+    long open_status = namev_open(curproc->p_cwd, filename, oflags, S_IFREG, 0, &res_vnode);
+    if (S_ISBLK(res_vnode->vn_mode)) {
+        if (!res_vnode->vn_dev.blockdev) {
+            vput(&res_vnode);
+            return -ENXIO;
+        }
+    }
+    if (S_ISCHR(res_vnode->vn_mode)) {
+        if (!res_vnode->vn_dev.chardev) {
+            vput(&res_vnode);
+            return -ENXIO;
+        }
+    }
+    if (S_ISDIR(res_vnode->vn_mode) && ((oflags & O_WRONLY) || (oflags & O_RDWR))) {
+        vput(&res_vnode);
+        return -EISDIR;
+    }
     return -1;
 }

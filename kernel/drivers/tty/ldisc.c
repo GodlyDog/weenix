@@ -16,7 +16,42 @@
  */
 void ldisc_init(ldisc_t *ldisc)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: ldisc_init");
+    ldisc->ldisc_cooked = LDISC_BUFFER_SIZE - 1;
+    ldisc->ldisc_tail = 0;
+    ldisc->ldisc_head = 0;
+    ldisc->ldisc_full = '0';
+    sched_queue_init(&ldisc->ldisc_read_queue);
+    for (int i = 0; i < LDISC_BUFFER_SIZE; i++) {
+        ldisc->ldisc_buffer[i] = '\0';
+    }
+}
+
+/**
+ * Increments an ldisc buffer index using circular buffer logic
+ * @param x index to increment
+ * @returns size_t of x incremented by one
+*/
+
+size_t ldisc_increment(size_t x) {
+    if (x == LDISC_BUFFER_SIZE - 1) {
+        return 0;
+    } else {
+        return x + 1;
+    }
+}
+
+/**
+ * Decrements an ldisc buffer index using circular buffer logic
+ * @param x index to decrement
+ * @returns size_t of x decremented by one
+*/
+
+size_t ldisc_decrement(size_t x) {
+    if (x == 0) {
+        return LDISC_BUFFER_SIZE - 1;
+    } else {
+        return x - 1;
+    }
 }
 
 /**
@@ -33,8 +68,16 @@ void ldisc_init(ldisc_t *ldisc)
  */
 long ldisc_wait_read(ldisc_t *ldisc, spinlock_t *lock)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: ldisc_wait_read");
-    return -1;
+    while ((ldisc->ldisc_head != ldisc->ldisc_tail)) {
+         if (ldisc->ldisc_tail != ldisc->ldisc_cooked) {
+            return 0;
+         }
+         long status = sched_cancellable_sleep_on(&ldisc->ldisc_read_queue, lock);
+         if (status < 0) {
+            return status;
+         }
+    }
+    return 0;
 }
 
 /**
@@ -54,8 +97,31 @@ long ldisc_wait_read(ldisc_t *ldisc, spinlock_t *lock)
  */
 size_t ldisc_read(ldisc_t *ldisc, char *buf, size_t count)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: ldisc_read");
-    return 0;
+    size_t tail = ldisc->ldisc_tail;
+    size_t cooked = ldisc->ldisc_cooked;
+    size_t iterator = tail;
+    size_t num_bytes = 0;
+    while (iterator != cooked) {
+        if (ldisc->ldisc_buffer[iterator] == EOT) {
+            ldisc->ldisc_tail = ldisc_increment(iterator);
+            return num_bytes;
+        }
+        buf[num_bytes] = ldisc->ldisc_buffer[iterator];
+        iterator = ldisc_increment(iterator);
+        num_bytes = num_bytes + 1;
+        if (num_bytes > 0 && ldisc->ldisc_full == '1') {
+            ldisc->ldisc_full = '0';
+        }
+        if (buf[num_bytes - 1] == '\n') {
+            ldisc->ldisc_tail = iterator;
+            return num_bytes;
+        }
+        if (num_bytes == count) {
+            ldisc->ldisc_tail = iterator;
+            return num_bytes;
+        }
+    }
+    return num_bytes;
 }
 
 /**
@@ -104,7 +170,55 @@ size_t ldisc_read(ldisc_t *ldisc, char *buf, size_t count)
  */
 void ldisc_key_pressed(ldisc_t *ldisc, char c)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: ldisc_key_pressed");
+    if (ldisc->ldisc_full == '1') {
+        if (c != ETX && c != BS) {
+            return;
+        }
+    }
+    if (ldisc->ldisc_head == ldisc_decrement(ldisc->ldisc_tail)) {
+        if (c != '\n' && c != BS && c != ETX) {
+            return;
+        } else if (c == '\n') {
+            ldisc->ldisc_full = '1';
+        }
+    }
+    if (c == '\n') {
+        ldisc->ldisc_buffer[ldisc->ldisc_head] = c;
+        ldisc->ldisc_head = ldisc_increment(ldisc->ldisc_head);
+        ldisc->ldisc_cooked = ldisc->ldisc_head;
+        sched_wakeup_on(&ldisc->ldisc_read_queue, NULL);
+        char buf[LDISC_BUFFER_SIZE];
+        buf[0] = c;
+        vterminal_write(&ldisc_to_tty(ldisc)->tty_vterminal, buf, 1);
+        return;
+    }
+    if (c == EOT) {
+        ldisc->ldisc_buffer[ldisc->ldisc_head] = c;
+        ldisc->ldisc_head = ldisc_increment(ldisc->ldisc_head);
+        ldisc->ldisc_cooked = ldisc->ldisc_head;
+        sched_wakeup_on(&ldisc->ldisc_read_queue, NULL);
+        return;
+    }
+    if (c == ETX) {
+        ldisc->ldisc_head = ldisc_increment(ldisc->ldisc_cooked);
+        ldisc->ldisc_buffer[ldisc_decrement(ldisc->ldisc_head)] = '\n';
+        ldisc->ldisc_cooked = ldisc->ldisc_head;
+        // QUESTION: write something in this case?
+        return;
+    }
+    if (c == BS) {
+        if (ldisc->ldisc_head == ldisc->ldisc_cooked) {
+            return;
+        }
+        ldisc->ldisc_head = ldisc_decrement(ldisc->ldisc_head);
+        char buf[LDISC_BUFFER_SIZE];
+        buf[0] = c;
+        vterminal_write(&ldisc_to_tty(ldisc)->tty_vterminal, buf, 1);
+        return;
+    }
+    ldisc->ldisc_buffer[ldisc->ldisc_head] = c;
+    ldisc->ldisc_head = ldisc_increment(ldisc->ldisc_head);
+    vterminal_key_pressed(&ldisc_to_tty(ldisc)->tty_vterminal);
 }
 
 /**
@@ -116,6 +230,17 @@ void ldisc_key_pressed(ldisc_t *ldisc, char c)
  */
 size_t ldisc_get_current_line_raw(ldisc_t *ldisc, char *s)
 {
-    NOT_YET_IMPLEMENTED("DRIVERS: ldisc_get_current_line_raw");
-    return 0;
+    size_t cooked = ldisc->ldisc_cooked;
+    size_t head = ldisc->ldisc_head;
+    if (cooked == head) {
+        return 0;
+    }
+    size_t iterator = cooked;
+    size_t num_bytes = 0;
+    while (iterator != head) {
+        s[num_bytes] = ldisc->ldisc_buffer[iterator];
+        iterator = ldisc_increment(iterator);
+        num_bytes = num_bytes + 1;
+    }
+    return num_bytes;
 }

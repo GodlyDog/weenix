@@ -68,6 +68,7 @@ void kthread_init()
 kthread_t *kthread_create(proc_t *proc, kthread_func_t func, long arg1,
                           void *arg2)
 {
+    dbg(DBG_TEST, "\nkthread_create\n");
     KASSERT(proc != NULL);
     KASSERT(func != NULL);
     kthread_t* thread = (kthread_t*) slab_obj_alloc(kthread_allocator);
@@ -147,6 +148,7 @@ void kthread_destroy(kthread_t *thr)
  */
 void kthread_cancel(kthread_t *thr, void *retval)
 {
+    dbg(DBG_TEST, "\nkthread_cancel\n");
     KASSERT(thr != curthr);
     spinlock_lock(&thr->kt_lock);
     thr -> kt_retval = retval;
@@ -159,6 +161,7 @@ void kthread_cancel(kthread_t *thr, void *retval)
  */
 void kthread_exit(void *retval)
 {
+    dbg(DBG_TEST, "\nkthread_exit\n");
     curthr->kt_retval = retval;
     proc_thread_exiting(retval);
 }

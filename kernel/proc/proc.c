@@ -213,6 +213,16 @@ proc_t *proc_create(const char *name)
     sched_queue_init(&proc->p_wait);
     spinlock_lock(&proc_list_lock);
     list_insert_head(&proc_list, &proc->p_list_link);
+    proc->p_cwd = curproc->p_cwd;
+    if (proc->p_cwd) {
+        vref(curproc->p_cwd);
+    }
+    for (int i = 0; i < NFILES; i++) {
+        proc->p_files[i] = curproc->p_files[i];
+        if (proc->p_files[i]) {
+            fref(proc->p_files[i]);
+        }
+    }
     spinlock_unlock(&proc_list_lock);
     return proc;
 }
@@ -236,10 +246,16 @@ proc_t *proc_create(const char *name)
  */
 void proc_cleanup(long status)
 {
-
+    dbg(DBG_TEST, "\nproc_cleanup\n");
     curproc->p_status = status;
     curproc->p_state = PROC_DEAD;
+    for (int fd = 0; fd < NFILES; fd++)
+    {
+        do_close(fd);
+    }
+    vput(&curproc->p_cwd);
     if (curproc->p_pid == PID_INIT) {
+        dbg(DBG_TEST, "\nInit process finish\n");
         initproc_finish();
     } else {
         list_iterate(&curproc->p_children, child, proc_t, p_child_link) {
@@ -265,6 +281,7 @@ void proc_cleanup(long status)
  */
 void proc_thread_exiting(void *retval)
 {
+    dbg(DBG_TEST, "\nproc_thread_exiting\n");
     proc_cleanup((long)retval);
     curthr->kt_retval = retval;
     curthr->kt_state = KT_EXITED;
@@ -280,9 +297,10 @@ void proc_thread_exiting(void *retval)
  */
 void proc_kill(proc_t *proc, long status)
 {
+    dbg(DBG_TEST, "\nproc_kill\n");
     KASSERT(proc != curproc);
     list_iterate(&proc->p_threads, thread, kthread_t, kt_plink) {
-        kthread_cancel(thread, &status); // not sure on status
+        kthread_cancel(thread, &status);
     }
 }
 
@@ -297,6 +315,7 @@ void proc_kill(proc_t *proc, long status)
  */
 void proc_kill_all()
 {
+    dbg(DBG_TEST, "\nproc_kill_all\n");
     spinlock_lock(&proc_list_lock);
     list_iterate(&proc_list, p, proc_t, p_list_link) {
         proc_t* parent = list_item(&p->p_child_link, proc_t, p_child_link);
@@ -380,11 +399,11 @@ void proc_destroy(proc_t *proc)
  * it does not have to return the one that exited earliest.
  */
 pid_t do_waitpid(pid_t pid, int *status, int options) {
+    dbg(DBG_TEST, "\ndo_waitpid\n");
     if (pid == 0 || pid < -1 || options) {
         return -ENOTSUP;
     }
     spinlock_lock(&curproc->p_children_lock);
-    dbg(DBG_TEST, "\nChecking list empty\n");
     if (pid == -1 && list_empty(&curproc->p_children)) {
         spinlock_unlock(&curproc->p_children_lock);
         return -ECHILD;
@@ -410,7 +429,6 @@ pid_t do_waitpid(pid_t pid, int *status, int options) {
         return -ECHILD;
     } else if (pid == -1) {
         while (1) {
-            dbg(DBG_TEST, "\nPage fault now!\n");
             list_iterate(&curproc->p_children, child, proc_t, p_child_link) {
                 if (child->p_state == PROC_DEAD) {
                     *status = child->p_status;
@@ -431,8 +449,9 @@ pid_t do_waitpid(pid_t pid, int *status, int options) {
  */
 void do_exit(long status)
 {
+    dbg(DBG_TEST, "\ndo_exit\n");
     curproc->p_status = status;
-    kthread_exit(&status); // (void*) status ?
+    kthread_exit(&status);
 }
 
 /*==========

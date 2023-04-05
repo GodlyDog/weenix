@@ -76,8 +76,24 @@ long namev_is_descendant(vnode_t *a, vnode_t *b)
 long namev_lookup(vnode_t *dir, const char *name, size_t namelen,
                   vnode_t **res_vnode)
 {
-    NOT_YET_IMPLEMENTED("VFS: namev_lookup");
-    return 0;
+    if (!dir) {
+        return -ENOTDIR;
+    }
+    if (!dir->vn_ops) {
+        return -ENOTDIR;
+    }
+    if (!dir->vn_ops->lookup) {
+        return -ENOTDIR;
+    }
+    if (!S_ISDIR(dir->vn_mode)) {
+        return -ENOTDIR;
+    }
+    // QUESTION: handle differently?
+    if (!name || !namelen || !res_vnode) {
+        return -EINVAL;
+    }
+    long status = dir->vn_ops->lookup(dir, name, namelen, res_vnode);
+    return status;
 }
 
 /*
@@ -187,7 +203,48 @@ static const char *namev_tokenize(const char **search, size_t *len)
 long namev_dir(vnode_t *base, const char *path, vnode_t **res_vnode,
                const char **name, size_t *namelen)
 {
-    NOT_YET_IMPLEMENTED("VFS: namev_dir");
+    vnode_t* start = base;
+    if (path[0] == '/') {
+        start = vfs_root_fs.fs_root;
+    }
+    vlock(start);
+    vref(start);
+    size_t token_len = 0;
+    const char* token;
+    while (1) {
+        // 1. path = /dev/null
+        // 2. path = /null
+        token = namev_tokenize(&path, &token_len);
+        // 1. token = dev/null, path = /null, token_len = 3
+        // 2. token = null, path = NULL, token_len = 4
+        if (token_len == 1 && token[0] == '.') {
+            *res_vnode = base;
+            continue;
+        }
+        if (!path) {
+            // 2. returns name = null, namelen = 4, res_vnode = vnode for /dev
+            *name = token;
+            *namelen = token_len;
+            vunlock(*res_vnode);
+            return 0;
+        }
+        // 1. start is / for first round
+        long status = namev_lookup(start, token, token_len, res_vnode);
+        // 1. res_vnode = vnode for /dev
+        if (status < 0) {
+            vput_locked(&start);
+            if (res_vnode) {
+                vput_locked(res_vnode);
+            }
+            return status;
+        }
+        vput_locked(&start);
+        start = *res_vnode;
+        // 1. start = vnode for /dev
+        vlock(start);
+    }
+    // vput_locked decrement ref count and unlock
+    // namev_lookup increments refcount and locks when calling the lookup operation
     return 0;
 }
 
@@ -217,8 +274,33 @@ long namev_dir(vnode_t *base, const char *path, vnode_t **res_vnode,
 long namev_open(vnode_t *base, const char *path, int oflags, int mode,
                 devid_t devid, struct vnode **res_vnode)
 {
-    NOT_YET_IMPLEMENTED("VFS: namev_open");
-    return 0;
+    if (strlen(path) > NAME_LEN) {
+        return -ENAMETOOLONG;
+    }
+    if (path[strlen(path) - 1] == '/' && (oflags & O_CREAT)) {
+        return -EINVAL;
+    }
+    const char* name;
+    size_t name_len;
+    vnode_t *container;
+    long status = namev_dir(base, path, &container, &name, &name_len);
+    if (status < 0) {
+        return status;
+    }
+    vlock(container);
+    long lookup = namev_lookup(container, name, name_len, res_vnode);
+    if (lookup == -ENOENT && (oflags & O_CREAT)) {
+        ssize_t created = container->vn_ops->mknod(container, name, name_len, mode, devid, res_vnode);
+        vunlock(container);
+        return created;
+    }
+    if (!S_ISDIR((*res_vnode)->vn_mode) && path[strlen(path) - 1] == '/') {
+        vput(res_vnode);
+        vput_locked(&container);
+        return -ENOTDIR;
+    }
+    vput_locked(&container);
+    return lookup;
 }
 
 /*

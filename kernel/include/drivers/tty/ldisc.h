@@ -48,7 +48,7 @@ typedef struct ldisc
 {
     size_t ldisc_cooked; // Cooked is the index after the most last or most recent '\n' in the buffer.
     size_t ldisc_tail;   // Tail is the index from which characters are read by processes
-    size_t ldisc_head;   // Head is the index from which new characters are placed
+    size_t ldisc_head;   // Head is the index at which a new character is placed
     char ldisc_full;     // Full identifies if the buffer is full
                          // 1 -> full
                          // 0 -> not full  

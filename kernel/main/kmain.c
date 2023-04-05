@@ -35,6 +35,7 @@
 #include "test/driverstest.h"
 #include "test/proctest.h"
 #include "test/vmtest.h"
+#include "test/kshell/kshell.h"
 
 GDB_DEFINE_HOOK(boot)
 
@@ -156,12 +157,30 @@ static void make_devices()
  */
 static void *initproc_run(long arg1, void *arg2)
 {
-#ifdef __VFS__
-    dbg(DBG_INIT, "Initializing VFS...\n");
-    vfs_init();
-    make_devices();
-#endif
-    proctest_main(0, NULL);
+    dbg(DBG_TEST, "\ninitproc_run\n");
+    #ifdef __VFS__
+        dbg(DBG_INIT, "Initializing VFS...\n");
+        vfs_init();
+        make_devices();
+    #endif
+        proctest_main(0, NULL);
+        driverstest_main(0, NULL);
+        /* To create a kshell on each terminal */
+    #ifdef __DRIVERS__
+        char name[32] = {0};
+        for (long i = 0; i < __NTERMS__; i++)
+        {
+            snprintf(name, sizeof(name), "kshell%ld", i);
+            proc_t *proc = proc_create("ksh");
+            kthread_t *thread = kthread_create(proc, kshell_proc_run, i, NULL);
+            sched_make_runnable(thread);
+        }
+    #endif
+
+    /* Run kshell commands until each kshell process exits */
+    int status = 0;
+    while (do_waitpid(-1, &status, 0) != -ECHILD)
+            ;
     return NULL;
 }
 
@@ -179,6 +198,7 @@ static void *initproc_run(long arg1, void *arg2)
  */
 void initproc_start()
 {
+    dbg(DBG_TEST, "\ninitproc_start\n");
     proc_t* init_process = proc_create("init");
     // put kassertions about the validity of the output of proc_create here
     kthread_t* thread = kthread_create(init_process, &initproc_run, 0, NULL);
