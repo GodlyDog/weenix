@@ -109,7 +109,7 @@ static ssize_t zero_read(chardev_t *dev, size_t pos, void *buf, size_t count)
 {
     char* ptr = (char*) buf;
     for (size_t i = 0; i < count; i++) {
-        ptr[i] = '0';
+        ptr[i] = 0;
     }
     return count;
 }

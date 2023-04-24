@@ -16,10 +16,10 @@
  */
 void ldisc_init(ldisc_t *ldisc)
 {
-    ldisc->ldisc_cooked = LDISC_BUFFER_SIZE - 1;
+    ldisc->ldisc_cooked = 0;
     ldisc->ldisc_tail = 0;
     ldisc->ldisc_head = 0;
-    ldisc->ldisc_full = '0';
+    ldisc->ldisc_full = 0;
     sched_queue_init(&ldisc->ldisc_read_queue);
     for (int i = 0; i < LDISC_BUFFER_SIZE; i++) {
         ldisc->ldisc_buffer[i] = '\0';
@@ -68,8 +68,8 @@ size_t ldisc_decrement(size_t x) {
  */
 long ldisc_wait_read(ldisc_t *ldisc, spinlock_t *lock)
 {
-    while ((ldisc->ldisc_head != ldisc->ldisc_tail)) {
-         if (ldisc->ldisc_tail != ldisc->ldisc_cooked) {
+    while (ldisc->ldisc_cooked == ldisc->ldisc_tail) {
+         if (ldisc->ldisc_full) {
             return 0;
          }
          long status = sched_cancellable_sleep_on(&ldisc->ldisc_read_queue, lock);
@@ -101,16 +101,17 @@ size_t ldisc_read(ldisc_t *ldisc, char *buf, size_t count)
     size_t cooked = ldisc->ldisc_cooked;
     size_t iterator = tail;
     size_t num_bytes = 0;
-    while (iterator != cooked) {
+    while ((iterator != cooked) || ldisc->ldisc_full) {
         if (ldisc->ldisc_buffer[iterator] == EOT) {
+            buf[num_bytes] = ldisc->ldisc_buffer[iterator];
             ldisc->ldisc_tail = ldisc_increment(iterator);
             return num_bytes;
         }
         buf[num_bytes] = ldisc->ldisc_buffer[iterator];
         iterator = ldisc_increment(iterator);
         num_bytes = num_bytes + 1;
-        if (num_bytes > 0 && ldisc->ldisc_full == '1') {
-            ldisc->ldisc_full = '0';
+        if (num_bytes > 0 && ldisc->ldisc_full == 1) {
+            ldisc->ldisc_full = 0;
         }
         if (buf[num_bytes - 1] == '\n') {
             ldisc->ldisc_tail = iterator;
@@ -170,7 +171,7 @@ size_t ldisc_read(ldisc_t *ldisc, char *buf, size_t count)
  */
 void ldisc_key_pressed(ldisc_t *ldisc, char c)
 {
-    if (ldisc->ldisc_full == '1') {
+    if (ldisc->ldisc_full == 1) {
         if (c != ETX && c != BS) {
             return;
         }
@@ -179,7 +180,7 @@ void ldisc_key_pressed(ldisc_t *ldisc, char c)
         if (c != '\n' && c != BS && c != ETX) {
             return;
         } else if (c == '\n') {
-            ldisc->ldisc_full = '1';
+            ldisc->ldisc_full = 1;
         }
     }
     if (c == '\n') {
@@ -187,9 +188,7 @@ void ldisc_key_pressed(ldisc_t *ldisc, char c)
         ldisc->ldisc_head = ldisc_increment(ldisc->ldisc_head);
         ldisc->ldisc_cooked = ldisc->ldisc_head;
         sched_wakeup_on(&ldisc->ldisc_read_queue, NULL);
-        char buf[LDISC_BUFFER_SIZE];
-        buf[0] = c;
-        vterminal_write(&ldisc_to_tty(ldisc)->tty_vterminal, buf, 1);
+        vterminal_write(&ldisc_to_tty(ldisc)->tty_vterminal, "\n", 1);
         return;
     }
     if (c == EOT) {
@@ -211,9 +210,7 @@ void ldisc_key_pressed(ldisc_t *ldisc, char c)
             return;
         }
         ldisc->ldisc_head = ldisc_decrement(ldisc->ldisc_head);
-        char buf[LDISC_BUFFER_SIZE];
-        buf[0] = c;
-        vterminal_write(&ldisc_to_tty(ldisc)->tty_vterminal, buf, 1);
+        vterminal_write(&ldisc_to_tty(ldisc)->tty_vterminal, "\b", 1);
         return;
     }
     ldisc->ldisc_buffer[ldisc->ldisc_head] = c;

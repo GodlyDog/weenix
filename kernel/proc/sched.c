@@ -162,12 +162,10 @@ void sched_init(void)
  */
 long sched_cancellable_sleep_on(ktqueue_t *queue, spinlock_t *lock)
 {
-    dbg(DBG_TEST, "\nsched_cancellable_sleep_on\n");
-    curthr -> kt_state = KT_SLEEP_CANCELLABLE;
     if (curthr -> kt_cancelled) {
-        curthr -> kt_state = KT_RUNNABLE;
         return -EINTR;
     }
+    curthr -> kt_state = KT_SLEEP_CANCELLABLE;
     sched_switch(queue, lock);
     if (curthr -> kt_cancelled) {
         return -EINTR;
@@ -183,7 +181,6 @@ long sched_cancellable_sleep_on(ktqueue_t *queue, spinlock_t *lock)
  */
 void sched_cancel(kthread_t *thr)
 {
-    dbg(DBG_TEST, "\nsched_cancel\n");
     spinlock_lock(&thr->kt_lock);
     thr -> kt_cancelled = 1;
     if (thr -> kt_state == KT_SLEEP_CANCELLABLE) {
@@ -227,7 +224,6 @@ void sched_switch(ktqueue_t *queue, spinlock_t *lock)
 {
     // runq locked before calling sched_switch
     // runq unlocked in core switch (activated by the context switch)
-    dbg(DBG_TEST, "\nsched_switch\n");
     KASSERT(curthr->kt_state != KT_ON_CPU);
     intr_disable();
     uint8_t current_ipl = intr_setipl(IPL_LOW);
@@ -244,7 +240,6 @@ void sched_switch(ktqueue_t *queue, spinlock_t *lock)
  */
 void sched_yield()
 {
-    dbg(DBG_TEST, "\nsched_yield\n");
     spinlock_lock(&curthr->kt_lock);
     KASSERT(curthr->kt_state == KT_ON_CPU);
     curthr->kt_state = KT_RUNNABLE;
@@ -264,7 +259,6 @@ void sched_yield()
  */
 void sched_make_runnable(kthread_t *thr)
 {
-    dbg(DBG_TEST, "\nsched_make_runnable\n");
     KASSERT(thr != curthr);
     uint8_t current_ipl = intr_getipl();
     intr_setipl(IPL_HIGH);
@@ -293,7 +287,6 @@ void sched_make_runnable(kthread_t *thr)
  */
 void sched_sleep_on(ktqueue_t *q, spinlock_t *lock)
 {
-    dbg(DBG_TEST, "\nsched_sleep_on\n");
     KASSERT(q != NULL);
     KASSERT(lock != NULL);
     uint8_t current_ipl = intr_getipl();
@@ -317,15 +310,14 @@ void sched_sleep_on(ktqueue_t *q, spinlock_t *lock)
  */
 void sched_wakeup_on(ktqueue_t *q, kthread_t **ktp)
 {
-    dbg(DBG_TEST, "\nsched_wakeup_on\n");
     spinlock_lock(&q->tq_lock);
     kthread_t* thread = ktqueue_dequeue(q);
     spinlock_unlock(&q->tq_lock);
-    if (thread == NULL) {
-        return;
-    }
     if (ktp != NULL) {
         *ktp = thread;
+    }
+    if (thread == NULL) {
+        return;
     }
     sched_make_runnable(thread);
 }
@@ -335,7 +327,6 @@ void sched_wakeup_on(ktqueue_t *q, kthread_t **ktp)
  */
 void sched_broadcast_on(ktqueue_t *q)
 {
-    dbg(DBG_TEST, "\nsched_broadcast_on\n");
     KASSERT(q != NULL);
     spinlock_lock(&q->tq_lock);
     kthread_t* thread;

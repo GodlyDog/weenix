@@ -62,7 +62,12 @@ long get_empty_fd(int *fd)
  */
 long do_open(const char *filename, int oflags)
 {
-    // check flags
+    if ((oflags & O_WRONLY) && (oflags & O_RDONLY)) {
+        return -EINVAL;
+    }
+    if ((oflags & O_WRONLY) && (oflags & O_RDWR)) {
+        return -EINVAL;
+    }
     int fd;
     long fd_status = get_empty_fd(&fd);
     if (fd_status < 0) {
@@ -70,6 +75,9 @@ long do_open(const char *filename, int oflags)
     }
     vnode_t* res_vnode;
     long open_status = namev_open(curproc->p_cwd, filename, oflags, S_IFREG, 0, &res_vnode);
+    if (open_status < 0) {
+        return open_status;
+    }
     if (S_ISBLK(res_vnode->vn_mode)) {
         if (!res_vnode->vn_dev.blockdev) {
             vput(&res_vnode);
@@ -84,7 +92,28 @@ long do_open(const char *filename, int oflags)
     }
     if (S_ISDIR(res_vnode->vn_mode) && ((oflags & O_WRONLY) || (oflags & O_RDWR))) {
         vput(&res_vnode);
-        return -EISDIR;
+        return -EISDIR; 
     }
-    return -1;
+    unsigned int mode = 0;
+    if (oflags & O_RDWR) {
+        mode = mode | FMODE_WRITE | FMODE_READ;
+    }
+    if (oflags & O_RDONLY) {
+        mode = mode | FMODE_READ;
+    }
+    if (oflags & O_WRONLY) {
+        mode = mode | FMODE_WRITE;
+    }
+    if (oflags & O_APPEND) {
+        mode = mode | FMODE_APPEND;
+    }
+    if ((oflags & O_TRUNC) && !S_ISDIR(res_vnode->vn_mode)) {
+        res_vnode->vn_ops->truncate_file(res_vnode);
+    }
+    file_t* created = fcreate(fd, res_vnode, mode);
+    vput(&res_vnode);
+    if (!created) {
+        return -ENOMEM;
+    }
+    return fd;
 }
