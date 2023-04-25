@@ -246,7 +246,7 @@ static void s5fs_delete_vnode(fs_t *fs, vnode_t *vn)
     s5_node_t* s5n = VNODE_TO_S5NODE(vn);
     s5fs_t* s5f = FS_TO_S5FS(fs);
     s5_inode_t inode = s5n->inode;
-    if (!inode.s5_linkcount) {
+    if (inode.s5_linkcount == 0) {
         s5_free_inode(s5f, inode.s5_number);
         return;
     }
@@ -400,7 +400,6 @@ static long s5fs_mknod(struct vnode *dir, const char *name, size_t namelen,
         return status;
     }
     *out = new;
-    vref(*out);
     return 0;
 }
 
@@ -477,7 +476,9 @@ static long s5fs_unlink(vnode_t *dir, const char *name, size_t namelen)
         return node;
     }
     vnode_t* to_remove = vget_locked(dir->vn_fs, node);
-    s5_remove_dirent(s5n, name, namelen, VNODE_TO_S5NODE(to_remove));
+    s5_node_t* to_remove_s5n = VNODE_TO_S5NODE(to_remove);
+    KASSERT(to_remove_s5n->inode.s5_linkcount > 0);
+    s5_remove_dirent(s5n, name, namelen, to_remove_s5n);
     KASSERT(s5n->dirtied_inode);
     vput_locked(&to_remove);
     return 0;

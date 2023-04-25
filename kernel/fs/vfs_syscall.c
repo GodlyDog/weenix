@@ -209,6 +209,7 @@ long do_mknod(const char *path, int mode, devid_t devid)
     if (status < 0) {
         return status;
     }
+    KASSERT(res->vn_mobj.mo_refcount == 1);
     vput(&res);
     return 0;
 }
@@ -261,7 +262,6 @@ long do_mkdir(const char *path)
         return status;
     }
     vnode_t* created;
-    // QUESTION: Does mkdir increment refcount? Does it return with vnode locked?
     status = res_vnode->vn_ops->mkdir(res_vnode, name, namelen, &created);
     vput_locked(&res_vnode);
     if (status < 0) {

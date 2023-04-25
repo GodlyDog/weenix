@@ -258,7 +258,7 @@ ssize_t s5_read_file(s5_node_t *sn, size_t pos, char *buf, size_t len)
  */
 ssize_t s5_write_file(s5_node_t *sn, size_t pos, const char *buf, size_t len)
 {
-    if (pos > S5_MAX_FILE_SIZE) {
+    if (pos >= S5_MAX_FILE_SIZE) {
         return -EFBIG;
     }
     int offset = S5_INODE_OFFSET(sn->inode.s5_number);
@@ -283,6 +283,7 @@ ssize_t s5_write_file(s5_node_t *sn, size_t pos, const char *buf, size_t len)
         memcpy((char *) pframe->pf_addr + S5_DATA_OFFSET(pos), buf + bytes_written, to_write);
         bytes_written += to_write;
         pos = pos + to_write;
+        sn->dirtied_inode = 1;
         s5_release_file_block(&pframe);
     }
     return bytes_written;
@@ -412,7 +413,7 @@ long s5_alloc_inode(s5fs_t *s5fs, uint16_t type, devid_t devid)
 
     inode->s5_un.s5_size = 0;
     inode->s5_type = type;
-    inode->s5_linkcount = 0;
+    inode->s5_linkcount = 1;
     memset(inode->s5_direct_blocks, 0, sizeof(inode->s5_direct_blocks));
     inode->s5_indirect_block =
         (S5_TYPE_CHR == type || S5_TYPE_BLK == type) ? devid : 0;
@@ -576,8 +577,11 @@ void s5_remove_dirent(s5_node_t *sn, const char *name, size_t namelen,
     s5_read_file(sn, sn->vnode.vn_len - sizeof(s5_dirent_t), (char *) &end, sizeof(s5_dirent_t));
     sn->vnode.vn_len -= sizeof(s5_dirent_t);
     sn->inode.s5_un.s5_size -= sizeof(s5_dirent_t);
-    s5_write_file(sn, write_position, (char *) &end, sizeof(s5_dirent_t));
+    if (ino != end.s5d_inode) {
+        s5_write_file(sn, write_position, (char *) &end, sizeof(s5_dirent_t));
+    }
     child->inode.s5_linkcount -= 1;
+    KASSERT(child->inode.s5_linkcount >= 0);
     child->dirtied_inode = 1;
     sn->dirtied_inode = 1;
 }
@@ -649,6 +653,7 @@ long s5_link(s5_node_t *dir, const char *name, size_t namelen,
         return status;
     }
     child->inode.s5_linkcount += 1;
+    KASSERT(child->inode.s5_linkcount > 0);
     return 0;
 }
 
