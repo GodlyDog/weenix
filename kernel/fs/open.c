@@ -97,13 +97,12 @@ long do_open(const char *filename, int oflags)
     unsigned int mode = 0;
     if (oflags & O_RDWR) {
         mode = mode | FMODE_WRITE | FMODE_READ;
-    }
-    if (oflags & O_RDONLY) {
+    } else if (oflags & O_WRONLY) {
+        mode = mode | FMODE_WRITE;
+    } else {
         mode = mode | FMODE_READ;
     }
-    if (oflags & O_WRONLY) {
-        mode = mode | FMODE_WRITE;
-    }
+    
     if (oflags & O_APPEND) {
         mode = mode | FMODE_APPEND;
     }

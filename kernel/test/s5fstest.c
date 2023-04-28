@@ -173,7 +173,7 @@ static void test_running_out_of_blocks()
 static int test_sparseness_direct_blocks()
 {
     const char *filename = "sparsefile";
-    int fd = (int)do_open(filename, O_RDWR | O_CREAT);
+    int fd = (int)do_open(filename, O_RDWR | O_CREAT); // linkcount does not stay at 1, drops to zero
 
     // Now write to some random address that'll be in a direct block
     const int addr = 10000;
@@ -188,9 +188,16 @@ static int test_sparseness_direct_blocks()
     test_assert(is_first_n_bytes_zero(fd, addr) == 1,
                 "sparseness for direct blocks failed");
 
+    stat_t statter;
+    long stat = do_stat(filename, &statter);
+    test_assert(stat == 0, "stat broke");
+
     // Get rid of this file
     test_assert(do_close(fd) == 0, "couldn't close file");
-    test_assert(do_unlink(filename) == 0, "couldnt unlink file");
+
+    stat = do_stat(filename, &statter);
+    test_assert(stat == 0, "stat broke");
+    test_assert(do_unlink(filename) == 0, "couldnt unlink file"); // fails because linkcount is 0
 
     return 0;
 }

@@ -160,21 +160,21 @@ long s5_file_block_to_disk_block(s5_node_t *sn, size_t file_blocknum,
             s5_free_block(FS_TO_S5FS(sn->vnode.vn_fs), allocated);
             return block;
         }
-        ((long *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] = block;
+        ((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] = block;
         s5_release_disk_block(&pframe);
         sn->dirtied_inode = 1;
     }
     pframe_t* pframe; // indirect block already allocated
     s5_get_disk_block(FS_TO_S5FS(sn->vnode.vn_fs), sn->inode.s5_indirect_block, alloc, &pframe);
-    if (!((long *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] && alloc) {
+    if (!((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] && alloc) {
         long block = s5_alloc_block(FS_TO_S5FS(sn->vnode.vn_fs));
         if (block < 0) {
             s5_release_disk_block(&pframe);
             return block;
         }
-        ((long *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] = block; // QUESTION: Should this be cast differently?
+        ((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] = block; // QUESTION: Should this be cast differently?
     }
-    long retval = ((long *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS];
+    long retval = ((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS];
     s5_release_disk_block(&pframe);
     return retval;
 }
@@ -265,6 +265,9 @@ ssize_t s5_write_file(s5_node_t *sn, size_t pos, const char *buf, size_t len)
     blocknum_t blocknum = S5_DATA_BLOCK(pos);
     size_t bytes_written = 0;
     pframe_t* pframe;
+    if (pos + len > S5_MAX_FILE_SIZE) {
+        len = S5_MAX_FILE_SIZE - pos;
+    }
     while (bytes_written < len) {
         blocknum = S5_DATA_BLOCK(pos);
         size_t to_write = MIN(S5_BLOCK_SIZE - S5_DATA_OFFSET(pos), len - bytes_written);
@@ -326,8 +329,13 @@ static long s5_alloc_block(s5fs_t *s5fs)
     pframe_t *pf;
     if (super->s5s_nfree == 0) {
         s5_get_disk_block(s5fs, super->s5s_free_blocks[S5_NBLKS_PER_FNODE - 1], 1, &pf);
+        long retval = super->s5s_free_blocks[S5_NBLKS_PER_FNODE - 1];
         super->s5s_nfree = S5_NBLKS_PER_FNODE - 1;
         memcpy(super->s5s_free_blocks, pf->pf_addr, sizeof(super->s5s_free_blocks));
+        memset(pf->pf_addr, 0, PAGE_SIZE);
+        s5_release_disk_block(&pf);
+        s5_unlock_super(s5fs);
+        return retval;
     } else {
         s5_get_disk_block(s5fs, super->s5s_free_blocks[super->s5s_nfree-1], 1, &pf);
         super->s5s_nfree -= 1;
@@ -413,7 +421,7 @@ long s5_alloc_inode(s5fs_t *s5fs, uint16_t type, devid_t devid)
 
     inode->s5_un.s5_size = 0;
     inode->s5_type = type;
-    inode->s5_linkcount = 1;
+    inode->s5_linkcount = 0;
     memset(inode->s5_direct_blocks, 0, sizeof(inode->s5_direct_blocks));
     inode->s5_indirect_block =
         (S5_TYPE_CHR == type || S5_TYPE_BLK == type) ? devid : 0;

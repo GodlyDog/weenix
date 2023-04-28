@@ -252,11 +252,11 @@ static void s5fs_delete_vnode(fs_t *fs, vnode_t *vn)
     }
     if (s5n->dirtied_inode) {
         blocknum_t blocknum = S5_INODE_BLOCK(vn->vn_vno);
-        int offset = S5_INODE_OFFSET(blocknum);
+        int offset = S5_INODE_OFFSET(vn->vn_vno);
         pframe_t* pframe;
-        s5_get_disk_block(s5f, blocknum, 0, &pframe);
+        s5_get_disk_block(s5f, blocknum, 1, &pframe);
         s5_inode_t* to_copy = ((s5_inode_t *) pframe->pf_addr) + offset;
-        memcpy(&s5n->inode, to_copy, sizeof(s5_inode_t));
+        memcpy(to_copy, &s5n->inode, sizeof(s5_inode_t));
         s5_release_disk_block(&pframe);
         s5n->dirtied_inode = 0;
         return;
@@ -330,6 +330,9 @@ static ssize_t s5fs_write(vnode_t *vnode, size_t pos, const void *buf,
                           size_t len)
 {
     KASSERT(!S_ISDIR(vnode->vn_mode) && "should be handled at the VFS level");
+    // if (pos > 3807000) {
+    //     dbg(DBG_TEST, "HERE");
+    // }
     s5_node_t* s5n = VNODE_TO_S5NODE(vnode);
     long status = s5_write_file(s5n, pos, buf, len);
     return status;
@@ -399,6 +402,9 @@ static long s5fs_mknod(struct vnode *dir, const char *name, size_t namelen,
         vput(&new);
         return status;
     }
+    KASSERT(new_s5n->inode.s5_linkcount == 1);
+    KASSERT(new_s5n->vnode.vn_mobj.mo_refcount == 1);
+    KASSERT(parent_s5n->inode.s5_linkcount > 0);
     *out = new;
     return 0;
 }
@@ -601,10 +607,10 @@ static long s5fs_mkdir(vnode_t *dir, const char *name, size_t namelen,
     s5_node_t* s5_dir_node = VNODE_TO_S5NODE(dir_vnode);
     long status = s5_link(VNODE_TO_S5NODE(dir), name, namelen, s5_dir_node);
     if (status < 0) {
-        vput_locked(&dir_vnode); // this will free the inode right?
+        vput_locked(&dir_vnode);
         return status;
     }
-    status = s5_link(s5_dir_node, ".", 1, s5_dir_node); // correct namelen? null character?
+    status = s5_link(s5_dir_node, ".", 1, s5_dir_node);
     if (status < 0) {
         s5_remove_dirent(VNODE_TO_S5NODE(dir), name, namelen, s5_dir_node);
         vput_locked(&dir_vnode);
@@ -619,7 +625,6 @@ static long s5fs_mkdir(vnode_t *dir, const char *name, size_t namelen,
     }
     vunlock(dir_vnode);
     *out = dir_vnode;
-    vref(*out);
     return 0;
 }
 
@@ -647,11 +652,16 @@ static long s5fs_rmdir(vnode_t *parent, const char *name, size_t namelen)
         return dir_inode;
     }
     vnode_t* remove_vnode = vget_locked(parent->vn_fs, dir_inode);
+    if (!S_ISDIR(remove_vnode->vn_mode)) {
+        vput_locked(&remove_vnode);
+        return -ENOTDIR;
+    }
     s5_node_t* remove_s5n = VNODE_TO_S5NODE(remove_vnode);
     s5_dirent_t result;
     size_t read = 0;
-    while (s5_read_file(remove_s5n, read, (char *) &result, sizeof(s5_dirent_t)) >= 0) {
+    while (s5_read_file(remove_s5n, read, (char *) &result, sizeof(s5_dirent_t)) > 0) {
         if (!name_match(result.s5d_name, ".", strlen(".")) && !name_match(result.s5d_name, "..", strlen(".."))) {
+            vput_locked(&remove_vnode);
             return -ENOTEMPTY;
         }
         read += sizeof(s5_dirent_t);

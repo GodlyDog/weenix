@@ -209,7 +209,6 @@ long do_mknod(const char *path, int mode, devid_t devid)
     if (status < 0) {
         return status;
     }
-    KASSERT(res->vn_mobj.mo_refcount == 1);
     vput(&res);
     return 0;
 }

@@ -33,8 +33,17 @@ void vmmap_init(void)
  */
 vmarea_t *vmarea_alloc(void)
 {
-    NOT_YET_IMPLEMENTED("VM: vmarea_alloc");
-    return NULL;
+    vmarea_t* area = slab_obj_alloc(vmarea_allocator);
+    area->vma_start = 0;
+    area->vma_end = 0;
+    area->vma_off = 0;
+    area->vma_prot = 0;
+    area->vma_flags = 0;
+    area->vma_mmap = NULL;
+    area->vma_obj = NULL;
+    list_link_init(&area->vma_plink);
+    // QUESTION: What should these values be, or is this fine?
+    return area;
 }
 
 /*
@@ -43,7 +52,13 @@ vmarea_t *vmarea_alloc(void)
  */
 void vmarea_free(vmarea_t *vma)
 {
-    NOT_YET_IMPLEMENTED("VM: vmarea_free");
+    if (vma->vma_plink) {
+        list_remove(&vma->vma_plink);
+    }
+    if (vma->vma_obj) {
+        mobj_put(&vma->vma_obj);
+    }
+    slab_obj_free(vmarea_allocator, vma);
 }
 
 /*
@@ -51,8 +66,10 @@ void vmarea_free(vmarea_t *vma)
  */
 vmmap_t *vmmap_create(void)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_create");
-    return NULL;
+    vmmap_t* vmmap = slab_obj_alloc(vmmap_allocator);
+    list_init(&vmmap->vmm_list);
+    vmmap->vmm_proc = NULL;
+    return vmmap;
 }
 
 /*
@@ -61,7 +78,12 @@ vmmap_t *vmmap_create(void)
  */
 void vmmap_destroy(vmmap_t **mapp)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_destroy");
+    list_iterate((*mapp)->vmm_list, area, vmarea_t, vma_plink) {
+        list_remove(area->vma_plink);
+        vmarea_free(area);
+    }
+    slab_obj_free(vmmap_allocator, *mapp);
+    *mapp = NULL;
 }
 
 /*
@@ -99,7 +121,11 @@ ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
  */
 vmarea_t *vmmap_lookup(vmmap_t *map, size_t vfn)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_lookup");
+    list_iterate(map->vmm_list, area, vmarea_t, vma_plink) {
+        if (area->vma_start =< vfn && area->vma_end >= vfn) {
+            return area;
+        }
+    }
     return NULL;
 }
 
@@ -125,7 +151,7 @@ void vmmap_collapse(vmmap_t *map)
  * Upon successful return, the new vmmap should be a clone of map with all 
  * shadow objects properly set up.
  *
- * For each vmarea, clone it's members. 
+ * For each vmarea, clone its members. 
  *  1) vmarea is share-mapped, you don't need to do anything special. 
  *  2) vmarea is not share-mapped, time for shadow objects: 
  *     a) Create two shadow objects, one for map and one for the new vmmap you
