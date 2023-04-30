@@ -41,7 +41,8 @@ static mobj_ops_t shadow_mobj_ops = {.get_pframe = shadow_get_pframe,
  */
 void shadow_init()
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_init");
+    shadow_allocator = slab_allocator_create("shadow", sizeof(mobj_shadow_t));
+    KASSERT(shadow_allocator);
 }
 
 /*
@@ -60,8 +61,22 @@ void shadow_init()
  */
 mobj_t *shadow_create(mobj_t *shadowed)
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_create");
-    return NULL;
+    mobj_shadow_t* shadow = slab_obj_alloc(shadow_allocator);
+    if (!shadow) {
+        return NULL;
+    }
+    if (shadowed->mo_type == MOBJ_SHADOW) {
+        mobj_shadow_t* shadowed_shadow = MOBJ_TO_SO(shadowed);
+        shadow->bottom_mobj = shadowed_shadow->bottom_mobj;
+    } else {
+        shadow->bottom_mobj = shadowed;
+    }
+    shadow->shadowed = shadowed;
+    mobj_init(&shadow->mobj, MOBJ_SHADOW, &shadow_mobj_ops);
+    mobj_ref(shadow->shadowed);
+    mobj_ref(shadow->bottom_mobj);
+    KASSERT(shadow->bottom_mobj->mo_type != MOBJ_SHADOW);
+    return &shadow->mobj;
 }
 
 /*
@@ -80,7 +95,24 @@ mobj_t *shadow_create(mobj_t *shadowed)
  */
 void shadow_collapse(mobj_t *o)
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_collapse");
+    mobj_shadow_t* shadow = MOBJ_TO_SO(o);
+    mobj_t* current = o;
+    while (current != NULL && current->mo_type == MOBJ_SHADOW) {
+        list_iterate(&current->mo_pframes, frame, pframe_t, pf_link) {
+            pframe_t* found = NULL;
+            mobj_find_pframe(o, frame->pf_pagenum, &found);
+            list_remove(&frame->pf_link);
+            if (!found) {
+                list_insert_tail(&o->mo_pframes, &frame->pf_link);
+            } else {
+                pframe_release(&found);
+            }
+        }
+        mobj_shadow_t* shadow = MOBJ_TO_SO(current);
+        KASSERT(current->mo_refcount == 1);
+        mobj_put(&current);
+        mobj_t* current = shadow->shadowed;
+    }
 }
 
 /*
@@ -111,8 +143,24 @@ void shadow_collapse(mobj_t *o)
 static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
                               pframe_t **pfp)
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_get_pframe");
-    return 0;
+    if (forwrite) {
+        long status = mobj_default_get_pframe(o, pagenum, 1, pfp);
+        return status;
+    } else {
+        mobj_shadow_t* shadow = MOBJ_TO_SO(o);
+        mobj_t* current = o;
+        while (current != NULL && current->mo_type == MOBJ_SHADOW) {
+            mobj_find_pframe(current, pagenum, pfp);
+            if (*pfp) {
+                // QUESTION: Should the page frame be locked on return?
+                return 0;
+            }
+            mobj_shadow_t* shadow = MOBJ_TO_SO(current);
+            mobj_t* current = shadow->shadowed;
+        }
+        long status = mobj_get_pframe(current, pagenum, 0, pfp);
+        return status;
+    }
 }
 
 /*
@@ -138,8 +186,29 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
  */
 static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_fill_pframe");
-    return -1;
+    mobj_shadow_t* shadow = MOBJ_TO_SO(o);
+    mobj_t* current = o;
+    pframe_t* found;
+    while (current != NULL && current->mo_type == MOBJ_SHADOW) {
+        mobj_find_pframe(current, pf->pf_pagenum, &found);
+        if (found) {
+            pf->pf_addr = found->pf_addr;
+            pf->pf_dirty = found->pf_dirty;
+            pf->pf_link = found->pf_link;
+            pf->pf_mutex = found->pf_mutex;
+            return 0;
+        }
+        mobj_shadow_t* shadow = MOBJ_TO_SO(current);
+        mobj_t* current = shadow->shadowed;
+    }
+    long status = mobj_get_pframe(current, pf->pf_pagenum, 0, &found);
+    if (status == 0) {
+        pf->pf_addr = found->pf_addr;
+        pf->pf_dirty = found->pf_dirty;
+        pf->pf_link = found->pf_link;
+        pf->pf_mutex = found->pf_mutex;
+    }
+    return status;
 }
 
 /*
@@ -153,8 +222,7 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
  */
 static long shadow_flush_pframe(mobj_t *o, pframe_t *pf)
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_flush_pframe");
-    return -1;
+    return 0;
 }
 
 /*
@@ -169,5 +237,9 @@ static long shadow_flush_pframe(mobj_t *o, pframe_t *pf)
  */
 static void shadow_destructor(mobj_t *o)
 {
-    NOT_YET_IMPLEMENTED("VM: shadow_destructor");
+    mobj_shadow_t* shadow = MOBJ_TO_SO(o);
+    mobj_default_destructor(o);
+    mobj_put(&shadow->shadowed);
+    mobj_put(&shadow->bottom_mobj);
+    slab_obj_free(shadow_allocator, shadow);
 }

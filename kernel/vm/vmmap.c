@@ -34,12 +34,15 @@ void vmmap_init(void)
 vmarea_t *vmarea_alloc(void)
 {
     vmarea_t* area = slab_obj_alloc(vmarea_allocator);
+    if (!area) {
+        return NULL;
+    }
     area->vma_start = 0;
     area->vma_end = 0;
     area->vma_off = 0;
     area->vma_prot = 0;
     area->vma_flags = 0;
-    area->vma_mmap = NULL;
+    area->vma_vmmap = NULL;
     area->vma_obj = NULL;
     list_link_init(&area->vma_plink);
     // QUESTION: What should these values be, or is this fine?
@@ -52,7 +55,7 @@ vmarea_t *vmarea_alloc(void)
  */
 void vmarea_free(vmarea_t *vma)
 {
-    if (vma->vma_plink) {
+    if (list_link_is_linked(&vma->vma_plink)) {
         list_remove(&vma->vma_plink);
     }
     if (vma->vma_obj) {
@@ -67,6 +70,9 @@ void vmarea_free(vmarea_t *vma)
 vmmap_t *vmmap_create(void)
 {
     vmmap_t* vmmap = slab_obj_alloc(vmmap_allocator);
+    if (!vmmap) {
+        return NULL;
+    }
     list_init(&vmmap->vmm_list);
     vmmap->vmm_proc = NULL;
     return vmmap;
@@ -78,8 +84,8 @@ vmmap_t *vmmap_create(void)
  */
 void vmmap_destroy(vmmap_t **mapp)
 {
-    list_iterate((*mapp)->vmm_list, area, vmarea_t, vma_plink) {
-        list_remove(area->vma_plink);
+    list_iterate(&(*mapp)->vmm_list, area, vmarea_t, vma_plink) {
+        list_remove(&area->vma_plink);
         vmarea_free(area);
     }
     slab_obj_free(vmmap_allocator, *mapp);
@@ -93,7 +99,12 @@ void vmmap_destroy(vmmap_t **mapp)
  */
 void vmmap_insert(vmmap_t *map, vmarea_t *new_vma)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_insert");
+    list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
+        if (area->vma_end >= new_vma->vma_start) {
+            list_insert_before(&area->vma_plink, &new_vma->vma_plink);
+        }
+    }
+    list_insert_tail(&map->vmm_list, &new_vma->vma_plink);
 }
 
 /*
@@ -111,7 +122,41 @@ void vmmap_insert(vmmap_t *map, vmarea_t *new_vma)
  */
 ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_find_range");
+    size_t user_start_page = ADDR_TO_PN(USER_MEM_LOW);
+    size_t user_end_page = ADDR_TO_PN(USER_MEM_HIGH);
+    if (dir == VMMAP_DIR_LOHI) {
+        size_t count = 0;
+        size_t start = 0;
+        for (size_t i = user_start_page; i < user_end_page; i++) {
+            vmarea_t* lookup = vmmap_lookup(map, i);
+            if (!lookup) {
+                if (!count) {
+                    start = i;
+                }
+                count += 1;
+            } else {
+                count = 0;
+                start = 0;
+            }
+            if (count == npages) {
+                return start;
+            }
+        }
+    }
+    if (dir == VMMAP_DIR_HILO) {
+        size_t count = 0;
+        for (size_t i = user_end_page; i >= user_start_page; i--) {
+            vmarea_t* lookup = vmmap_lookup(map, i);
+            if (!lookup) {
+                count += 1;
+            } else {
+                count = 0;
+            }
+            if (count == npages) {
+                return i;
+            }
+        }
+    }
     return -1;
 }
 
@@ -121,8 +166,8 @@ ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
  */
 vmarea_t *vmmap_lookup(vmmap_t *map, size_t vfn)
 {
-    list_iterate(map->vmm_list, area, vmarea_t, vma_plink) {
-        if (area->vma_start =< vfn && area->vma_end >= vfn) {
+    list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
+        if (area->vma_start <= vfn && area->vma_end > vfn) {
             return area;
         }
     }
@@ -165,8 +210,46 @@ void vmmap_collapse(vmmap_t *map)
  */
 vmmap_t *vmmap_clone(vmmap_t *map)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_clone");
-    return NULL;
+    vmmap_t* new_map = vmmap_create();
+    if (!new_map) {
+        return NULL;
+    }
+    new_map->vmm_proc = map->vmm_proc;
+    list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
+        vmarea_t* new_area = vmarea_alloc();
+        if (!new_area) {
+            vmmap_destroy(&new_map);
+            return NULL;
+        }
+        new_area->vma_end = area->vma_end;
+        new_area->vma_start = area->vma_start;
+        new_area->vma_off = area->vma_off;
+        new_area->vma_flags = area->vma_flags;
+        new_area->vma_prot = area->vma_prot;
+        if (area->vma_flags != MAP_SHARED) {
+            mobj_lock(area->vma_obj);
+            mobj_t* new_shadow = shadow_create(area->vma_obj);
+            if (!new_shadow) {
+                shadow_collapse(area->vma_obj);
+                mobj_unlock(area->vma_obj);
+                vmmap_destroy(&new_map);
+                return NULL;
+            }
+            mobj_t* old_shadow = shadow_create(area->vma_obj);
+            if (!old_shadow) {
+                shadow_collapse(area->vma_obj);
+                mobj_unlock(area->vma_obj);
+                vmmap_destroy(&new_map);
+                return NULL;
+            }
+            new_area->vma_obj = new_shadow;
+            mobj_put(&area->vma_obj);
+            area->vma_obj = old_shadow;
+            mobj_unlock(area->vma_obj);
+        }
+        vmmap_insert(new_map, new_area);
+    }
+    return new_map;
 }
 
 /*
@@ -206,8 +289,64 @@ vmmap_t *vmmap_clone(vmmap_t *map)
 long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
                int prot, int flags, off_t off, int dir, vmarea_t **new_vma)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_map");
-    return -1;
+    // set up the new vmarea_t
+    size_t start = lopage;
+    if (!lopage) {
+        start = vmmap_find_range(map, npages, dir);
+        if (!start) {
+            return -ENOMEM;
+        }
+    }
+    vmarea_t* new_area = vmarea_alloc();
+    if (!new_area) {
+        return -ENOMEM;
+    }
+    // set the fields of the new area
+    new_area->vma_end = start + npages;
+    new_area->vma_off = ADDR_TO_PN((char *) PN_TO_ADDR(lopage) + off) - lopage;
+    new_area->vma_flags = flags;
+    new_area->vma_prot = prot;
+    new_area->vma_vmmap = map;
+
+    // get the mobj
+    mobj_t* mobj = NULL;
+    if (!file) {
+        mobj = anon_create();
+    } else {
+        file->vn_ops->mmap(file, &mobj);
+    }
+    if (!mobj) {
+        vmarea_free(new_area);
+        return -ENOMEM;
+    }
+
+    new_area->vma_obj = mobj; // QUESTION: Is this the right mobj for the new area?
+    
+    // set up shadow object if needed
+    mobj_t* shadow = NULL;
+    if (flags == MAP_PRIVATE) {
+        shadow = shadow_create(mobj);
+        new_area->vma_obj = shadow; // QUESTION: Should I be putting the actual mobj and making the area point to the shadow like this?
+        mobj_put(&mobj);
+        if (!shadow) {
+            vmarea_free(new_area);
+            return -ENOMEM;
+        }
+    }
+
+    // remove mappings in the specified range if MAP_FIXED is set
+    if (flags == MAP_FIXED && lopage == 0) {
+        long status = vmmap_remove(map, lopage, npages);
+        if (status < 0) {
+            vmarea_free(new_area);
+            mobj_put(&mobj);
+            if (shadow) {
+                mobj_put(&shadow);
+            }
+        }
+    }
+    *new_vma = new_area;
+    return 0;
 }
 
 /*
@@ -243,8 +382,41 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
  */
 long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_remove");
-    return -1;
+    size_t endpage = lopage + npages;
+    list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
+        if (area->vma_start >= lopage && area->vma_end > endpage) {
+            area->vma_start = endpage;
+            area->vma_off = 0;
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end));
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(lopage));
+        } else if (area->vma_start < lopage && area->vma_end >= lopage) {
+            area->vma_end = lopage;
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage));
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
+        } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
+            list_remove(&area->vma_plink);
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage));
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(lopage));
+        } else if (area->vma_start < lopage && area->vma_end > endpage) {
+            vmarea_t* new_area = vmarea_alloc();
+            if (!new_area) {
+                return -ENOMEM;
+            }
+            new_area->vma_start = endpage;
+            new_area->vma_end = area->vma_end;
+            new_area->vma_obj = area->vma_obj;
+            mobj_ref(new_area->vma_obj);
+            new_area->vma_flags = area->vma_flags;
+            new_area->vma_off = 0;
+            new_area->vma_prot = area->vma_prot;
+            new_area->vma_vmmap = map;
+            area->vma_end = lopage;
+            vmmap_insert(map, new_area);
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(new_area->vma_end)); // QUESTION: Is this the right range for unmapping and flushing?
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(new_area->vma_end) - (uintptr_t) PN_TO_ADDR(area->vma_start));
+        }
+    }
+    return 0;
 }
 
 /*
@@ -253,8 +425,16 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
  */
 long vmmap_is_range_empty(vmmap_t *map, size_t startvfn, size_t npages)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_is_range_empty");
-    return 0;
+    size_t endvfn = startvfn + npages;
+    list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
+        if (area->vma_start < endvfn && area->vma_start >= startvfn) {
+            return 0;
+        }
+        if (area->vma_end <= endvfn && area->vma_end > startvfn) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 /*
@@ -274,7 +454,26 @@ long vmmap_is_range_empty(vmmap_t *map, size_t startvfn, size_t npages)
  */
 long vmmap_read(vmmap_t *map, const void *vaddr, void *buf, size_t count)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_read");
+    size_t start_page = ADDR_TO_PN(vaddr);
+    size_t starting_offset = PAGE_OFFSET(vaddr);
+    size_t end_page = ADDR_TO_PN((char *) vaddr + count);
+    size_t bytes_read = 0;
+    const char* position = vaddr;
+    for (size_t i = start_page; i <= end_page; i++) {
+        vmarea_t* area = vmmap_lookup(map, i);
+        KASSERT(area != NULL);
+        size_t to_read = MIN(PAGE_SIZE - PAGE_OFFSET(position), count - bytes_read);
+        pframe_t* pframe;
+        long status = area->vma_obj->mo_ops.get_pframe(area->vma_obj, i, 0, &pframe);
+        if (status < 0) {
+            return status;
+        }
+        memcpy((char *) buf + bytes_read, (char *) pframe->pf_addr + PAGE_OFFSET(position), to_read);
+        bytes_read += to_read;
+        position = position + to_read;
+        pframe_release(&pframe);
+    }
+    KASSERT(bytes_read == count);
     return 0;
 }
 
@@ -296,7 +495,26 @@ long vmmap_read(vmmap_t *map, const void *vaddr, void *buf, size_t count)
  */
 long vmmap_write(vmmap_t *map, void *vaddr, const void *buf, size_t count)
 {
-    NOT_YET_IMPLEMENTED("VM: vmmap_write");
+    size_t start_page = ADDR_TO_PN(vaddr);
+    size_t starting_offset = PAGE_OFFSET(vaddr);
+    size_t end_page = ADDR_TO_PN((char *) vaddr + count);
+    size_t bytes_written = 0;
+    const char* position = vaddr;
+    for (size_t i = start_page; i <= end_page; i++) {
+        vmarea_t* area = vmmap_lookup(map, i);
+        KASSERT(area != NULL);
+        size_t to_write = MIN(PAGE_SIZE - PAGE_OFFSET(position), count - bytes_written);
+        pframe_t* pframe;
+        long status = area->vma_obj->mo_ops.get_pframe(area->vma_obj, i, 1, &pframe);
+        if (status < 0) {
+            return status;
+        }
+        memcpy((char *) pframe->pf_addr + PAGE_OFFSET(position), (char *) buf + bytes_written, to_write);
+        bytes_written += to_write;
+        position = position + to_write;
+        pframe_release(&pframe);
+    }
+    KASSERT(bytes_written == count);
     return 0;
 }
 
