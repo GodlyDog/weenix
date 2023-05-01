@@ -27,7 +27,8 @@ static mobj_ops_t anon_mobj_ops = {.get_pframe = NULL,
  */
 void anon_init()
 {
-    NOT_YET_IMPLEMENTED("VM: anon_init");
+    anon_allocator = slab_allocator_create("anon", sizeof(mobj_t));
+    KASSERT(anon_allocator);
 }
 
 /*
@@ -36,8 +37,10 @@ void anon_init()
  */
 mobj_t *anon_create()
 {
-    NOT_YET_IMPLEMENTED("VM: anon_create");
-    return NULL;
+    mobj_t* anon = slab_obj_alloc(anon_allocator);
+    mobj_init(anon, MOBJ_ANON, &anon_mobj_ops);
+    mobj_lock(anon);
+    return anon;
 }
 
 /* 
@@ -61,5 +64,6 @@ static long anon_flush_pframe(mobj_t *o, pframe_t *pf) { return 0; }
  */
 static void anon_destructor(mobj_t *o)
 {
-    NOT_YET_IMPLEMENTED("VM: anon_destructor");
+    mobj_default_destructor(o);
+    slab_obj_free(anon_allocator, o);
 }

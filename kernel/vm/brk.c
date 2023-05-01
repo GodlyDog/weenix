@@ -13,7 +13,7 @@
  *
  * Some important details on the range of values 'p_brk' can take:
  * 1) 'p_brk' should not be set to a value lower than 'p_start_brk', since this
- *    could overrite data in another memory region. But, 'p_brk' can be equal to
+ *    could overwrite data in another memory region. But, 'p_brk' can be equal to
  *    'p_start_brk', which would mean that there is no heap yet/is empty.
  * 2) Growth of the 'p_brk' cannot overlap with/expand into an existing
  *    mapping. Use vmmap_is_range_empty() to help with this.

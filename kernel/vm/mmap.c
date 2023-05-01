@@ -55,8 +55,61 @@
 long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
              void **ret)
 {
-    NOT_YET_IMPLEMENTED("VM: do_mmap");
-    return -1;
+    // all EINVAL cases
+    if (len <= 0 || off < 0) {
+        return -EINVAL;
+    }
+    if (!(flags & MAP_PRIVATE) && !(flags & MAP_SHARED)) {
+        return -EINVAL;
+    }
+    if (!PAGE_ALIGNED(off)) {
+        return -EINVAL;
+    }
+    if (!PAGE_ALIGNED(addr) && (flags & MAP_FIXED)) {
+        return -EINVAL;
+    }
+    file_t* file = curproc->p_files[fd];
+
+    // the EBADF case
+    if (!file && !(flags & MAP_ANON)) {
+        return -EBADF;
+    }
+
+    // all ENODEV cases
+    if (file) {
+        if (!file->f_vnode->vn_ops) {
+            return -ENODEV;
+        }
+        if (!file->f_vnode->vn_ops->mmap) {
+            return -ENODEV;
+        }
+
+        // EACCES cases
+        if (!S_ISREG(file->f_vnode->vn_mode)) {
+            return -EACCES;
+        }
+        if (!(file->f_mode & FMODE_READ)) {
+            return -EACCES;
+        }
+        if ((file->f_mode & FMODE_APPEND) && (prot & PROT_WRITE)) {
+            return -EACCES;
+        }
+        if (!(file->f_mode & FMODE_READ || file->f_mode & FMODE_WRITE) && (flags & MAP_SHARED) && (prot & PROT_WRITE)) {
+            return -EACCES;
+        }
+    }
+    size_t lopage = ADDR_TO_PN(addr);
+    size_t npages = ADDR_TO_PN(addr + len) - lopage;
+    vmarea_t* new_vma;
+    long status = vmmap_map(curproc->p_vmmap, file, lopage, npages, prot, flags, off, VMMAP_DIR_HILO, &new_vma);
+    if (status < 0) {
+        return status;
+    }
+    tlb_flush_range(new_vma->vma_start, new_vma->vma_end - new_vma->vma_start);
+    if (ret) {
+        *ret = PN_TO_ADDR(new_vma->vma_start);
+    }
+    return 0;
 }
 
 /*
@@ -78,6 +131,16 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
  */
 long do_munmap(void *addr, size_t len)
 {
-    NOT_YET_IMPLEMENTED("VM: do_munmap");
-    return -1;
+    if (!PAGE_ALIGNED(addr)) {
+        return -EINVAL;
+    }
+    if (len == 0) {
+        return -EINVAL;
+    }
+    // QUESTION: How do I check the range of the user address space?
+    size_t lopage = ADDR_TO_PN(addr);
+    size_t endpage = ADDR_TO_PN(addr + len);
+    KASSERT(lopage != endpage); // Your math is bad
+    long status = vmmap_remove(curproc->p_vmmap, lopage, endpage - lopage);
+    return status;
 }

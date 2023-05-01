@@ -122,6 +122,7 @@ void vmmap_insert(vmmap_t *map, vmarea_t *new_vma)
  */
 ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
 {
+    KASSERT(dir == VMMAP_DIR_HILO || dir == VMMAP_DIR_LOHI);
     size_t user_start_page = ADDR_TO_PN(USER_MEM_LOW);
     size_t user_end_page = ADDR_TO_PN(USER_MEM_HIGH);
     if (dir == VMMAP_DIR_LOHI) {
@@ -221,7 +222,7 @@ vmmap_t *vmmap_clone(vmmap_t *map)
             vmmap_destroy(&new_map);
             return NULL;
         }
-        new_area->vma_end = area->vma_end;
+        new_area->vma_end = area->vma_end; // QUESTION: Shouldn't this be a different region?
         new_area->vma_start = area->vma_start;
         new_area->vma_off = area->vma_off;
         new_area->vma_flags = area->vma_flags;
@@ -307,6 +308,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     new_area->vma_flags = flags;
     new_area->vma_prot = prot;
     new_area->vma_vmmap = map;
+    new_area->vma_start = start;
 
     // get the mobj
     mobj_t* mobj = NULL;

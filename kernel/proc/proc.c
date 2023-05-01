@@ -211,6 +211,8 @@ proc_t *proc_create(const char *name)
     sched_queue_init(&proc->p_wait);
     list_insert_head(&curproc->p_children, &proc->p_child_link);
     sched_queue_init(&proc->p_wait);
+    vmmap_t* map_clone = vmmap_clone(curproc->p_vmmap);
+    proc->p_vmmap = map_clone;
     spinlock_lock(&proc_list_lock);
     list_insert_head(&proc_list, &proc->p_list_link);
     proc->p_cwd = curproc->p_cwd;
