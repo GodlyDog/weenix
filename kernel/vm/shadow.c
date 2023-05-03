@@ -111,10 +111,10 @@ void shadow_collapse(mobj_t *o)
                 pframe_release(&found);
             }
         }
-        mobj_shadow_t* shadow = MOBJ_TO_SO(current);
+        shadow = MOBJ_TO_SO(current);
         KASSERT(current->mo_refcount == 1);
         mobj_put(&current);
-        mobj_t* current = shadow->shadowed;
+        current = shadow->shadowed;
     }
 }
 
@@ -148,9 +148,6 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
 {
     if (forwrite) {
         long status = mobj_default_get_pframe(o, pagenum, 1, pfp);
-        if (status >= 0) {
-            kmutex_unlock(&(*pfp)->pf_mutex);
-        }
         return status;
     } else {
         mobj_shadow_t* shadow = MOBJ_TO_SO(o);
@@ -164,8 +161,8 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
                 // QUESTION: Should the page frame be locked on return?
                 return 0;
             }
-            mobj_shadow_t* shadow = MOBJ_TO_SO(current);
-            mobj_t* current = shadow->shadowed;
+            shadow = MOBJ_TO_SO(current);
+            current = shadow->shadowed;
         }
         mobj_lock(current);
         long status = mobj_get_pframe(current, pagenum, 0, pfp);
@@ -209,13 +206,11 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
         mobj_unlock(current);
         if (found) {
             memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
-            pf->pf_dirty = 1;
             pframe_release(&found);
-            mobj_unlock(o);
             return 0;
         }
-        mobj_shadow_t* shadow = MOBJ_TO_SO(current);
-        mobj_t* current = shadow->shadowed;
+        shadow = MOBJ_TO_SO(current);
+        current = shadow->shadowed;
     }
     mobj_lock(current);
     long status = mobj_get_pframe(current, pf->pf_pagenum, 0, &found);
@@ -224,7 +219,6 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
         memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
         pframe_release(&found);
     }
-    mobj_unlock(o);
     return status;
 }
 

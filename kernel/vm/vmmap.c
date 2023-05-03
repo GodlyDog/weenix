@@ -395,8 +395,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
         if (area->vma_start >= lopage && area->vma_end > endpage) {
             area->vma_start = endpage;
             area->vma_off = 0;
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end));
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(lopage));
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage));
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
         } else if (area->vma_start < lopage && area->vma_end > endpage) {
             vmarea_t* new_area = vmarea_alloc();
             if (!new_area) {
@@ -412,16 +412,16 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             new_area->vma_vmmap = map;
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(new_area->vma_end)); // QUESTION: Is this the right range for unmapping and flushing?
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(new_area->vma_end) - (uintptr_t) PN_TO_ADDR(area->vma_start));
-        } else if (area->vma_start < lopage && area->vma_end >= lopage) {
-            area->vma_end = lopage;
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage));
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
-        } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
-            list_remove(&area->vma_plink);
             pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage));
             tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(lopage));
+        } else if (area->vma_start < lopage && area->vma_end >= lopage) {
+            area->vma_end = lopage;
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end));
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(lopage));
+        } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
+            list_remove(&area->vma_plink);
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(area->vma_end));
+            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(area->vma_start));
         }
     }
     return 0;
