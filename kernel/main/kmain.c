@@ -163,6 +163,9 @@ static void *initproc_run(long arg1, void *arg2)
         vfs_init();
         make_devices();
     #endif
+    char *argv[2] = {"segfault", NULL}; 
+    char *envp[1] = {NULL}; 
+    kernel_execve("/usr/bin/segfault", argv, envp);
         // proctest_main(0, NULL);
         // driverstest_main(0, NULL);
         /* To create a kshell on each terminal */

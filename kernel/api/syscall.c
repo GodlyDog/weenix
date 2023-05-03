@@ -69,8 +69,25 @@ void syscall_init(void) { intr_register(INTR_SYSCALL, syscall_handler); }
  */
 static long sys_read(read_args_t *args)
 {
-    NOT_YET_IMPLEMENTED("VM: sys_read");
-    return -1;
+    read_args_t arguments;
+    long ret = copy_from_user(&arguments, args, sizeof(arguments));
+    ERROR_OUT_RET(ret);
+    size_t npages = 1;
+    while (npages * PAGE_SIZE < arguments.nbytes) {
+        npages += 1;
+    }
+    char* buffer = page_alloc_n(npages);
+    if (!buffer) {
+        ret = -ENOMEM;
+        ERROR_OUT_RET(ret);
+    }
+    ret = do_read(arguments.fd, buffer, arguments.nbytes);
+    ssize_t bytes_read = ret;
+    ERROR_OUT_RET(ret);
+    ret = copy_to_user(arguments.buf, buffer, arguments.nbytes);
+    ERROR_OUT_RET(ret);
+    page_free_n(buffer, npages);
+    return bytes_read;
 }
 
 /*
@@ -84,8 +101,23 @@ static long sys_read(read_args_t *args)
  */
 static long sys_write(write_args_t *args)
 {
-    NOT_YET_IMPLEMENTED("VM: sys_write");
-    return -1;
+    write_args_t arguments;
+    long ret = copy_from_user(&arguments, args, sizeof(arguments));
+    ERROR_OUT_RET(ret);
+    size_t npages = 1;
+    while (npages * PAGE_SIZE < arguments.nbytes) {
+        npages += 1;
+    }
+    char* buffer = page_alloc_n(npages);
+    if (!buffer) {
+        ret = -ENOMEM;
+        ERROR_OUT_RET(ret);
+    }
+    ret = do_write(arguments.fd, buffer, arguments.nbytes);
+    ssize_t bytes_written = ret;
+    ERROR_OUT_RET(ret);
+    page_free_n(buffer, npages);
+    return bytes_written;
 }
 
 /*
@@ -100,8 +132,18 @@ static long sys_write(write_args_t *args)
  */
 static long sys_getdents(getdents_args_t *args)
 {
-    NOT_YET_IMPLEMENTED("VM: sys_getdents");
-    return -1;
+    getdents_args_t arguments;
+    long ret = copy_from_user(&arguments, args, sizeof(arguments));
+    ERROR_OUT_RET(-ENOMEM);
+    if (arguments.count < sizeof(dirent_t)) {
+        ERROR_OUT_RET(-ENOMEM); // What error message here?
+    }
+    unsigned long bytes_read = 0;
+    while(arguments.count > bytes_read) {
+        do_getdent(arguments.fd, arguments.dirp); // QUESTION: Doesn't this just overwrite the same dirent_t until the while loop ends?
+        bytes_read += sizeof(dirent_t); // QUESTION: Is the dirent_t being copied back to the user here?
+    }
+    return bytes_read;
 }
 
 #ifdef __MOUNTING__

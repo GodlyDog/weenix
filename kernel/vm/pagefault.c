@@ -50,7 +50,7 @@ void handle_pagefault(uintptr_t vaddr, uintptr_t cause)
     dbg(DBG_VM, "vaddr = 0x%p (0x%p), cause = %lu\n", (void *)vaddr,
         PAGE_ALIGN_DOWN(vaddr), cause);
     size_t page = ADDR_TO_PN(vaddr);
-    vmarea_t* lookup = vmarea_lookup(curproc->p_vmmap, page);
+    vmarea_t* lookup = vmmap_lookup(curproc->p_vmmap, page);
     if (!lookup) {
         do_exit(EFAULT);
     }
@@ -69,19 +69,19 @@ void handle_pagefault(uintptr_t vaddr, uintptr_t cause)
         forwrite = 1;
     }
     pframe_t* pfp;
-    lookup->vma_obj->mo_ops.get_pframe(lookup->vma_obj, page, forwrite, &pfp);
-    if (!pfp) {
+    long status = mobj_get_pframe(lookup->vma_obj, lookup->vma_off + page - lookup->vma_start, forwrite, &pfp);
+    if (status < 0) {
         do_exit(EFAULT);
     }
-    uintptr_t paddr = pt_virt_to_phys(vaddr);
+    uintptr_t paddr = pt_virt_to_phys((uintptr_t) pfp->pf_addr);
+    pframe_release(&pfp);
     uint32_t ptflags = PT_PRESENT | PT_USER;
     if (cause & FAULT_WRITE) {
         ptflags = ptflags | PT_WRITE;
     }
-    long status = pt_map(curproc->p_pml4, paddr, PAGE_ALIGN_DOWN(vaddr), PT_PRESENT | PT_USER | PT_WRITE, ptflags);
+    status = pt_map(curproc->p_pml4, paddr, (uintptr_t) PAGE_ALIGN_DOWN(vaddr), PT_PRESENT | PT_USER | PT_WRITE, ptflags);
     if (status < 0) {
-        do_exit(EFAULT); // QUESTION: Should these be negative? (check edstem)
+        do_exit(EFAULT);
     }
-    tlb_flush_all(); // QUESTION: Flush the whole TLB, or just the vaddr we are looking for?
-
+    tlb_flush((uintptr_t) PAGE_ALIGN_DOWN(vaddr));
 }

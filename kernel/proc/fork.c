@@ -57,6 +57,24 @@ static uintptr_t fork_setup_stack(const regs_t *regs, void *kstack)
  */
 long do_fork(struct regs *regs)
 {
-    NOT_YET_IMPLEMENTED("VM: do_fork");
-    return -1;
+    proc_t* proc = proc_create(curproc->p_name);
+    if (!proc) {
+        return -ENOMEM;
+    }
+    kthread_t* thread = kthread_clone(curthr);
+    if (!thread) {
+        proc_destroy(proc);
+        return -ENOMEM;
+    }
+    regs->r_rax = 0;
+    uintptr_t new_stack_pointer = fork_setup_stack(regs, (void*) thread->kt_ctx.c_kstack);
+    thread->kt_ctx.c_rsp = new_stack_pointer;
+    thread->kt_ctx.c_pml4 = proc->p_pml4;
+    thread->kt_ctx.c_rip = (uintptr_t) userland_entry;
+    thread->kt_proc = proc;
+    list_insert_tail(&proc->p_threads, &thread->kt_plink);
+    pt_unmap_range(curproc->p_pml4, USER_MEM_LOW, USER_MEM_HIGH);
+    tlb_flush_all();
+    sched_make_runnable(thread);
+    return proc->p_pid;
 }

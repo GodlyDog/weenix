@@ -120,6 +120,8 @@ static ssize_t zero_read(chardev_t *dev, size_t pos, void *buf, size_t count)
  */
 static long zero_mmap(vnode_t *file, mobj_t **ret)
 {
-    NOT_YET_IMPLEMENTED("VM: zero_mmap");
-    return -1;
+    mobj_t* anon = anon_create();
+    mobj_unlock(anon);
+    *ret = anon;
+    return 0;
 }

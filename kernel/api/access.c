@@ -116,8 +116,13 @@ long user_vecdup(argvec_t *uvec, char ***kvecp)
  */
 long addr_perm(proc_t *p, const void *vaddr, int perm)
 {
-    NOT_YET_IMPLEMENTED("VM: addr_perm");
-    return 0;
+    vmarea_t* area = vmmap_lookup(p->p_vmmap, ADDR_TO_PN(vaddr));
+    KASSERT(area); // QUESTION: This should always be guaranteed right?
+    if (perm & area->vma_prot) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 /*
@@ -131,6 +136,13 @@ long addr_perm(proc_t *p, const void *vaddr, int perm)
  */
 long range_perm(proc_t *p, const void *vaddr, size_t len, int perm)
 {
-    NOT_YET_IMPLEMENTED("VM: range_perm");
-    return 0;
+    size_t start = ADDR_TO_PN(vaddr);
+    size_t end = ADDR_TO_PN((char *) vaddr + len) + 1; // QUESTION: Is this enough to always guarantee that all of the desired region is covered? Should be plus one?
+    for (size_t i = start; i < end; i++) {
+        long granted = addr_perm(p, PN_TO_ADDR(i), perm);
+        if (!granted) {
+            return 0;
+        }
+    }
+    return 1;
 }

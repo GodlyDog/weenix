@@ -85,9 +85,10 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         }
 
         // EACCES cases
-        if (!S_ISREG(file->f_vnode->vn_mode)) {
-            return -EACCES;
-        }
+        // if (!S_ISREG(file->f_vnode->vn_mode)) {
+        //     return -EACCES;
+        // }
+        // QUESTION: How to check if it is a regular file?
         if (!(file->f_mode & FMODE_READ)) {
             return -EACCES;
         }
@@ -99,9 +100,9 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         }
     }
     size_t lopage = ADDR_TO_PN(addr);
-    size_t npages = ADDR_TO_PN(addr + len) - lopage;
+    size_t npages = ADDR_TO_PN((uintptr_t) addr + len) + 1 - lopage;
     vmarea_t* new_vma;
-    long status = vmmap_map(curproc->p_vmmap, file, lopage, npages, prot, flags, off, VMMAP_DIR_HILO, &new_vma);
+    long status = vmmap_map(curproc->p_vmmap, file->f_vnode, lopage, npages, prot, flags, off, VMMAP_DIR_HILO, &new_vma);
     if (status < 0) {
         return status;
     }
@@ -139,7 +140,7 @@ long do_munmap(void *addr, size_t len)
     }
     // QUESTION: How do I check the range of the user address space?
     size_t lopage = ADDR_TO_PN(addr);
-    size_t endpage = ADDR_TO_PN(addr + len);
+    size_t endpage = ADDR_TO_PN((uintptr_t) addr + len) + 1;
     KASSERT(lopage != endpage); // Your math is bad
     long status = vmmap_remove(curproc->p_vmmap, lopage, endpage - lopage);
     return status;

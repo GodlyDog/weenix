@@ -344,7 +344,8 @@ static ssize_t s5fs_write(vnode_t *vnode, size_t pos, const void *buf,
  */
 static long s5fs_mmap(vnode_t *file, mobj_t **ret)
 {
-    NOT_YET_IMPLEMENTED("VM: s5fs_mmap");
+    mobj_ref(&file->vn_mobj);
+    *ret = &file->vn_mobj;
     return 0;
 }
 

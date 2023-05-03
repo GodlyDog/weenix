@@ -52,6 +52,44 @@
  */
 long do_brk(void *addr, void **ret)
 {
-    NOT_YET_IMPLEMENTED("VM: do_brk");
-    return 0;
+    if (!addr) {
+        *ret = curproc->p_brk;
+        return 0;
+    }
+    if ((uintptr_t) addr > USER_MEM_HIGH) {
+        return -ENOMEM;
+    }
+    if (addr < curproc->p_start_brk) {
+        return -ENOMEM;
+    }
+    size_t lopage = ADDR_TO_PN(curproc->p_brk);
+    size_t endpage = ADDR_TO_PN(addr) + 1;
+    vmarea_t* heap = vmmap_lookup(curproc->p_vmmap, ADDR_TO_PN(curproc->p_start_brk));
+    if (!heap) {
+        // create a heap
+        vmmap_map(curproc->p_vmmap, NULL, ADDR_TO_PN(addr), 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
+        curproc->p_brk = addr;
+        *ret = curproc->p_brk;
+        return 0;
+    } else {
+        // change size of heap
+        if (heap->vma_end <= endpage) {
+            // grow heap
+            if (!vmmap_is_range_empty(curproc->p_vmmap, lopage, endpage - lopage)) {
+                return -ENOMEM;
+            }
+            heap->vma_end = endpage;
+            curproc->p_brk = addr;
+            *ret = curproc->p_brk;
+            return 0;
+        } else {
+            // shrink heap
+            // vmmap_remove(curproc->p_vmmap, endpage, heap->vma_end);
+            heap->vma_end = endpage;
+            // QUESTION: Zero out the freed space?
+            curproc->p_brk = addr;
+            *ret = curproc->p_brk;
+            return 0;
+        }
+    }
 }

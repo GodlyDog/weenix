@@ -49,7 +49,7 @@ mobj_t *anon_create()
  */
 static long anon_fill_pframe(mobj_t *o, pframe_t *pf)
 {
-    NOT_YET_IMPLEMENTED("VM: annon_fill_pframe");
+    memset(pf->pf_addr, 0, PAGE_SIZE);
     return 0;
 }
 

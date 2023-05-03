@@ -75,6 +75,7 @@ mobj_t *shadow_create(mobj_t *shadowed)
     mobj_init(&shadow->mobj, MOBJ_SHADOW, &shadow_mobj_ops);
     mobj_ref(shadow->shadowed);
     mobj_ref(shadow->bottom_mobj);
+    mobj_lock(&shadow->mobj);
     KASSERT(shadow->bottom_mobj->mo_type != MOBJ_SHADOW);
     return &shadow->mobj;
 }
@@ -100,7 +101,9 @@ void shadow_collapse(mobj_t *o)
     while (current != NULL && current->mo_type == MOBJ_SHADOW) {
         list_iterate(&current->mo_pframes, frame, pframe_t, pf_link) {
             pframe_t* found = NULL;
+            mobj_lock(o);
             mobj_find_pframe(o, frame->pf_pagenum, &found);
+            mobj_unlock(o);
             list_remove(&frame->pf_link);
             if (!found) {
                 list_insert_tail(&o->mo_pframes, &frame->pf_link);
@@ -145,12 +148,18 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
 {
     if (forwrite) {
         long status = mobj_default_get_pframe(o, pagenum, 1, pfp);
+        if (status >= 0) {
+            kmutex_unlock(&(*pfp)->pf_mutex);
+        }
         return status;
     } else {
         mobj_shadow_t* shadow = MOBJ_TO_SO(o);
         mobj_t* current = o;
+        mobj_unlock(o);
         while (current != NULL && current->mo_type == MOBJ_SHADOW) {
+            mobj_lock(current);
             mobj_find_pframe(current, pagenum, pfp);
+            mobj_unlock(current);
             if (*pfp) {
                 // QUESTION: Should the page frame be locked on return?
                 return 0;
@@ -158,7 +167,12 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
             mobj_shadow_t* shadow = MOBJ_TO_SO(current);
             mobj_t* current = shadow->shadowed;
         }
+        mobj_lock(current);
         long status = mobj_get_pframe(current, pagenum, 0, pfp);
+        if (status >= 0) {
+            kmutex_unlock(&(*pfp)->pf_mutex);
+        }
+        mobj_unlock(current);
         return status;
     }
 }
@@ -187,27 +201,30 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
 static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
 {
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
-    mobj_t* current = o;
+    mobj_t* current = shadow->shadowed;
     pframe_t* found;
     while (current != NULL && current->mo_type == MOBJ_SHADOW) {
+        mobj_lock(current);
         mobj_find_pframe(current, pf->pf_pagenum, &found);
+        mobj_unlock(current);
         if (found) {
-            pf->pf_addr = found->pf_addr;
-            pf->pf_dirty = found->pf_dirty;
-            pf->pf_link = found->pf_link;
-            pf->pf_mutex = found->pf_mutex;
+            memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
+            pf->pf_dirty = 1;
+            pframe_release(&found);
+            mobj_unlock(o);
             return 0;
         }
         mobj_shadow_t* shadow = MOBJ_TO_SO(current);
         mobj_t* current = shadow->shadowed;
     }
+    mobj_lock(current);
     long status = mobj_get_pframe(current, pf->pf_pagenum, 0, &found);
+    mobj_unlock(current);
     if (status == 0) {
-        pf->pf_addr = found->pf_addr;
-        pf->pf_dirty = found->pf_dirty;
-        pf->pf_link = found->pf_link;
-        pf->pf_mutex = found->pf_mutex;
+        memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
+        pframe_release(&found);
     }
+    mobj_unlock(o);
     return status;
 }
 

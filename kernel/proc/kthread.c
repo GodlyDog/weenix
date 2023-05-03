@@ -110,8 +110,29 @@ kthread_t *kthread_create(proc_t *proc, kthread_func_t func, long arg1,
  */
 kthread_t *kthread_clone(kthread_t *thr)
 {
-    NOT_YET_IMPLEMENTED("VM: kthread_clone");
-    return NULL;
+    kthread_t* thread = (kthread_t*) slab_obj_alloc(kthread_allocator);
+    if (thread == NULL) {
+        return NULL;
+    }
+    char* stack = alloc_stack();
+    thread->kt_ctx.c_kstack = (uintptr_t) stack;
+    thread->kt_ctx.c_kstacksz = DEFAULT_STACK_SIZE;
+    thread->kt_kstack = stack;
+    spinlock_lock(&thr->kt_lock);
+    thread->kt_retval = thr->kt_retval;
+    thread->kt_errno = thr->kt_errno;
+    thread->kt_cancelled = thr->kt_cancelled;
+    spinlock_unlock(&thr->kt_lock);
+    spinlock_init(&thread->kt_lock);
+    list_init(&thread->kt_mutexes);
+    list_link_init(&thread->kt_plink);
+    list_link_init(&thread->kt_qlink);
+    thread->kt_recent_core = ~0UL;
+    thread->kt_state = KT_NO_STATE;
+    thread->kt_preemption_count = 0;
+    thread->kt_wchan = NULL;
+    return thread;
+
 }
 
 /*
