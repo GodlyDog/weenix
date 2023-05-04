@@ -215,7 +215,6 @@ vmmap_t *vmmap_clone(vmmap_t *map)
     if (!new_map) {
         return NULL;
     }
-    new_map->vmm_proc = map->vmm_proc;
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
         vmarea_t* new_area = vmarea_alloc();
         if (!new_area) {
