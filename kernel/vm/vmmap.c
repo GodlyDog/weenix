@@ -74,7 +74,7 @@ vmmap_t *vmmap_create(void)
         return NULL;
     }
     list_init(&vmmap->vmm_list);
-    vmmap->vmm_proc = NULL;
+    vmmap->vmm_proc = curproc;
     return vmmap;
 }
 
@@ -102,6 +102,7 @@ void vmmap_insert(vmmap_t *map, vmarea_t *new_vma)
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
         if (area->vma_end >= new_vma->vma_start) {
             list_insert_before(&area->vma_plink, &new_vma->vma_plink);
+            return;
         }
     }
     list_insert_tail(&map->vmm_list, &new_vma->vma_plink);
@@ -131,7 +132,7 @@ ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
         for (size_t i = user_start_page; i < user_end_page; i++) {
             vmarea_t* lookup = vmmap_lookup(map, i);
             if (!lookup) {
-                if (!count) {
+                if (count == 0) {
                     start = i;
                 }
                 count += 1;
@@ -140,13 +141,14 @@ ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
                 start = 0;
             }
             if (count == npages) {
+                KASSERT(start >= user_start_page);
                 return start;
             }
         }
     }
     if (dir == VMMAP_DIR_HILO) {
         size_t count = 0;
-        for (size_t i = user_end_page; i >= user_start_page; i--) {
+        for (size_t i = user_end_page - 1; i >= user_start_page; i--) {
             vmarea_t* lookup = vmmap_lookup(map, i);
             if (!lookup) {
                 count += 1;
@@ -154,6 +156,7 @@ ssize_t vmmap_find_range(vmmap_t *map, size_t npages, int dir)
                 count = 0;
             }
             if (count == npages) {
+                KASSERT(i >= user_start_page);
                 return i;
             }
         }
@@ -221,7 +224,7 @@ vmmap_t *vmmap_clone(vmmap_t *map)
             vmmap_destroy(&new_map);
             return NULL;
         }
-        new_area->vma_end = area->vma_end; // QUESTION: Shouldn't this be a different region?
+        new_area->vma_end = area->vma_end;
         new_area->vma_start = area->vma_start;
         new_area->vma_off = area->vma_off;
         new_area->vma_flags = area->vma_flags;
@@ -338,7 +341,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     }
 
     // remove mappings in the specified range if MAP_FIXED is set
-    if ((flags & MAP_FIXED) && lopage == 0) {
+    if (((flags & MAP_FIXED) != 0) && (lopage != 0)) {
         long status = vmmap_remove(map, lopage, npages);
         if (status < 0) {
             vmarea_free(new_area);
@@ -392,9 +395,10 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
     size_t endpage = lopage + npages;
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
         if (area->vma_start >= lopage && area->vma_end > endpage) {
+            size_t old_start = area->vma_start;
             area->vma_start = endpage;
-            area->vma_off = 0;
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage));
+            area->vma_off += area->vma_start - old_start;
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(old_start), (uintptr_t) PN_TO_ADDR(endpage));
             tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
         } else if (area->vma_start < lopage && area->vma_end > endpage) {
             vmarea_t* new_area = vmarea_alloc();
@@ -406,20 +410,22 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             new_area->vma_obj = area->vma_obj;
             mobj_ref(new_area->vma_obj);
             new_area->vma_flags = area->vma_flags;
-            new_area->vma_off = 0;
+            new_area->vma_off = area->vma_off + (new_area->vma_start - area->vma_start);
             new_area->vma_prot = area->vma_prot;
             new_area->vma_vmmap = map;
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage));
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PAGE_ALIGN_DOWN(PN_TO_ADDR(lopage)), (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(endpage)));
             tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(lopage));
-        } else if (area->vma_start < lopage && area->vma_end >= lopage) {
+        } else if (area->vma_start < lopage && area->vma_end > lopage && area->vma_end <= endpage) {
+            size_t old_end = area->vma_end;
             area->vma_end = lopage;
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end));
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(old_end));
             tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(lopage));
         } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
             list_remove(&area->vma_plink);
-            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(area->vma_end));
+            vmarea_free(area);
+            pt_unmap_range(map->vmm_proc->p_pml4, (uintptr_t) PAGE_ALIGN_DOWN(PN_TO_ADDR(area->vma_start)), (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(area->vma_end)));
             tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(area->vma_start));
         }
     }
@@ -472,7 +478,7 @@ long vmmap_read(vmmap_t *map, const void *vaddr, void *buf, size_t count)
         size_t to_read = MIN(PAGE_SIZE - PAGE_OFFSET(position), count - bytes_read);
         pframe_t* pframe;
         mobj_lock(area->vma_obj);
-        long status = mobj_get_pframe(area->vma_obj, i, 0, &pframe);
+        long status = mobj_get_pframe(area->vma_obj, i - area->vma_start + area->vma_off, 0, &pframe);
         mobj_unlock(area->vma_obj);
         if (status < 0) {
             return status;
@@ -515,7 +521,7 @@ long vmmap_write(vmmap_t *map, void *vaddr, const void *buf, size_t count)
         size_t to_write = MIN(PAGE_SIZE - PAGE_OFFSET(position), count - bytes_written);
         pframe_t* pframe;
         mobj_lock(area->vma_obj);
-        long status = mobj_get_pframe(area->vma_obj, i, 1, &pframe);
+        long status = mobj_get_pframe(area->vma_obj, i - area->vma_start + area->vma_off, 1, &pframe);
         mobj_unlock(area->vma_obj);
         if (status < 0) {
             return status;

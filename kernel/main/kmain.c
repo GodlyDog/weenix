@@ -164,7 +164,8 @@ static void *initproc_run(long arg1, void *arg2)
         make_devices();
     #endif
     char *argv[2] = {"segfault", NULL}; 
-    char *envp[1] = {NULL}; 
+    char *envp[1] = {NULL};
+    //vmtest_main(0, 0); 
     kernel_execve("/usr/bin/segfault", argv, envp);
         // proctest_main(0, NULL);
         // driverstest_main(0, NULL);

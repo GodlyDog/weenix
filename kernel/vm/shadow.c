@@ -212,7 +212,14 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
         shadow = MOBJ_TO_SO(current);
         current = shadow->shadowed;
     }
+    long owns = kmutex_owns_mutex(&current->mo_mutex);
+    if (!owns) { // SPAGHETTI
+        mobj_lock(current);
+    }
     long status = mobj_get_pframe(current, pf->pf_pagenum, 0, &found);
+    if (!owns) { // MORE SPAGHETTI
+        mobj_unlock(current);
+    }
     if (status == 0) {
         memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
         pframe_release(&found);
