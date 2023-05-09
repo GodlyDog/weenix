@@ -19,6 +19,22 @@
 #include "mm/mman.h"
 #include "fs/vnode.h"
 
+typedef struct mobj_shadow
+{
+    // the mobj parts of this shadow object
+    mobj_t mobj;
+    // a reference to the mobj that is the data source for this shadow object
+    // This should be a reference to a shadow object of some ancestor process.
+    // This is used to traverse the shadow object chain.
+    mobj_t *shadowed;
+    // a reference to the mobj at the bottom of this shadow object's chain
+    // this should NEVER be a shadow object (i.e. it should have some type other
+    // than MOBJ_SHADOW)
+    mobj_t *bottom_mobj;
+} mobj_shadow_t;
+
+#define MOBJ_TO_SO(o) CONTAINER_OF(o, mobj_shadow_t, mobj)
+
 long test_vmmap() {
     vmmap_t *map = curproc->p_vmmap;
 
@@ -73,7 +89,8 @@ long test_vmmap() {
     file_t* file = fget(fd);
     size_t off = PAGE_SIZE;
     vmarea_t* area;
-    vmmap_map(curproc->p_vmmap, file->f_vnode, start, 16, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    long status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 16, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
     test_assert(area->vma_start == (size_t) start, "Start is wrong");
     test_assert(area->vma_end == (size_t) (start + 16), "End is wrong");
     test_assert(area->vma_off == 1, "Offset is wrong");
@@ -86,7 +103,8 @@ long test_vmmap() {
     }
     vmmap_remove(map, start, 16);
     test_assert(list_empty(&map->vmm_list), "List not empty");
-    vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
     vmmap_remove(map, start, 16);
     list_iterate(&map->vmm_list, vma, vmarea_t, vma_plink) {
         test_assert(vma->vma_start == (size_t) (start + 16), "Start is wrong");
@@ -95,7 +113,8 @@ long test_vmmap() {
     }
     vmmap_remove(map, start + 16, 16);
     test_assert(list_empty(&map->vmm_list), "List not empty");
-    vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
     vmmap_remove(map, start + 16, 16);
     list_iterate(&map->vmm_list, vma, vmarea_t, vma_plink) {
         test_assert(vma->vma_start == area->vma_start, "Start is wrong");
@@ -107,7 +126,8 @@ long test_vmmap() {
     vmmap_remove(map, start, 16);
     test_assert(vmmap_is_range_empty(map, start, 16), "Range not empty");
     test_assert(list_empty(&map->vmm_list), "List not empty");
-    vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
     vmmap_remove(map, start + 8, 16);
     size_t count = 0;
     list_iterate(&map->vmm_list, vma, vmarea_t, vma_plink) {
@@ -125,18 +145,38 @@ long test_vmmap() {
     test_assert(count == 2, "Not the expected number of vmareas");
     vmmap_remove(map, start, 32);
     test_assert(vmmap_is_range_empty(map, start, 32), "Vmarea not removed");
-    vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
     const char* buf = "This should be readable";
     count = strlen(buf);
     file->f_vnode->vn_len = PAGE_SIZE * 32;
-    long status = vmmap_write(map, PN_TO_ADDR(start), buf, count);
+    status = vmmap_write(map, PN_TO_ADDR(start), buf, count);
     test_assert(status == 0, "Write failed");
     char* receive = "";
     status = vmmap_read(map, PN_TO_ADDR(start), receive, count);
     test_assert(status == 0, "Read failed");
     test_assert(!strncmp(buf, receive, count), "Did not read correctly");
-    
-    return 0; 
+    const char* buf2 = (const char *) kmalloc(PAGE_SIZE * 3 + 1);
+    memset((void *) buf2, 'a', PAGE_SIZE * 3);
+    status = vmmap_write(map, PN_TO_ADDR(start), buf2, PAGE_SIZE * 3 - 1);
+    test_assert(status == 0, "Write failed");
+    char* receive2 = (char *) kmalloc(PAGE_SIZE * 4);
+    status = vmmap_read(map, PN_TO_ADDR(start), receive2, PAGE_SIZE * 3 - 1);
+    test_assert(status == 0, "Read failed");
+    test_assert(!strncmp(buf2, receive2, PAGE_SIZE * 3 - 1), "Did not read correctly");
+    vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), ADDR_TO_PN(USER_MEM_HIGH));
+    kfree((void *) buf2);
+    kfree((void *) receive2);
+
+    // shadow testing
+
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_PRIVATE | MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
+    test_assert(area->vma_obj->mo_type == MOBJ_SHADOW, "Obj type is wrong");
+    mobj_shadow_t* shadow = MOBJ_TO_SO(area->vma_obj);
+
+
+    return 0;
 }
 
 long vmtest_main(long arg1, void* arg2) {

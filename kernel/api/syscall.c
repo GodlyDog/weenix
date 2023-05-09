@@ -113,6 +113,9 @@ static long sys_write(write_args_t *args)
         ret = -ENOMEM;
         ERROR_OUT_RET(ret);
     }
+    for (size_t i = 0; i < arguments.nbytes; i++) {
+        buffer[i] = ((char *) arguments.buf)[i];
+    }
     ret = do_write(arguments.fd, buffer, arguments.nbytes);
     ssize_t bytes_written = ret;
     ERROR_OUT_RET(ret);
@@ -134,14 +137,17 @@ static long sys_getdents(getdents_args_t *args)
 {
     getdents_args_t arguments;
     long ret = copy_from_user(&arguments, args, sizeof(arguments));
-    ERROR_OUT_RET(-ENOMEM);
+    ERROR_OUT_RET(ret);
     if (arguments.count < sizeof(dirent_t)) {
-        ERROR_OUT_RET(-ENOMEM); // What error message here?
+        ERROR_OUT_RET(-EINVAL); // What error message here?
     }
-    unsigned long bytes_read = 0;
+    size_t bytes_read = 0;
     while(arguments.count > bytes_read) {
-        do_getdent(arguments.fd, arguments.dirp); // QUESTION: Doesn't this just overwrite the same dirent_t until the while loop ends?
+        dirent_t dirp;
+        do_getdent(arguments.fd, &dirp);
         bytes_read += sizeof(dirent_t); // QUESTION: Is the dirent_t being copied back to the user here?
+        ret = copy_to_user(arguments.dirp, &dirp, sizeof(dirent_t));
+        ERROR_OUT_RET(ret);
     }
     return bytes_read;
 }

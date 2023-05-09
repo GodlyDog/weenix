@@ -69,7 +69,9 @@ void handle_pagefault(uintptr_t vaddr, uintptr_t cause)
         forwrite = 1;
     }
     pframe_t* pfp;
+    mobj_lock(lookup->vma_obj);
     long status = mobj_get_pframe(lookup->vma_obj, lookup->vma_off + page - lookup->vma_start, forwrite, &pfp);
+    mobj_unlock(lookup->vma_obj);
     if (status < 0) {
         do_exit(EFAULT);
     }

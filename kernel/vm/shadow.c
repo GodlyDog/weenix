@@ -97,7 +97,7 @@ mobj_t *shadow_create(mobj_t *shadowed)
 void shadow_collapse(mobj_t *o)
 {
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
-    mobj_t* current = o;
+    mobj_t* current = shadow->shadowed;
     while (current != NULL && current->mo_type == MOBJ_SHADOW) {
         list_iterate(&current->mo_pframes, frame, pframe_t, pf_link) {
             pframe_t* found = NULL;
@@ -146,29 +146,29 @@ void shadow_collapse(mobj_t *o)
 static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
                               pframe_t **pfp)
 {
+    mobj_shadow_t* shadow = MOBJ_TO_SO(o);
+    KASSERT(shadow->bottom_mobj->mo_type != MOBJ_SHADOW);
+    KASSERT(shadow->shadowed != o);
     if (forwrite) {
-        long status = mobj_default_get_pframe(o, pagenum, 1, pfp);
+        kmutex_lock(&shadow->bottom_mobj->mo_mutex);
+        long status = mobj_default_get_pframe(shadow->bottom_mobj, pagenum, 1, pfp); // QUESTION: Should I be calling this on the bottom mobj?
+        kmutex_unlock(&shadow->bottom_mobj->mo_mutex);
         return status;
     } else {
-        mobj_shadow_t* shadow = MOBJ_TO_SO(o);
-        mobj_t* current = o;
-        mobj_unlock(o);
+        mobj_t* current = shadow->shadowed;
         while (current != NULL && current->mo_type == MOBJ_SHADOW) {
             mobj_lock(current);
             mobj_find_pframe(current, pagenum, pfp);
             mobj_unlock(current);
             if (*pfp) {
-                // QUESTION: Should the page frame be locked on return?
                 return 0;
             }
             shadow = MOBJ_TO_SO(current);
+            KASSERT(shadow->shadowed != current);
             current = shadow->shadowed;
         }
         mobj_lock(current);
         long status = mobj_get_pframe(current, pagenum, 0, pfp);
-        if (status >= 0) {
-            kmutex_unlock(&(*pfp)->pf_mutex);
-        }
         mobj_unlock(current);
         return status;
     }
@@ -256,6 +256,5 @@ static void shadow_destructor(mobj_t *o)
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
     mobj_default_destructor(o);
     mobj_put(&shadow->shadowed);
-    mobj_put(&shadow->bottom_mobj);
     slab_obj_free(shadow_allocator, shadow);
 }

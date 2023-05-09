@@ -331,13 +331,13 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     mobj_t* shadow = NULL;
     if (flags & MAP_PRIVATE) {
         shadow = shadow_create(mobj);
-        mobj_unlock(shadow);
         new_area->vma_obj = shadow; // QUESTION: Should I be putting the actual mobj and making the area point to the shadow like this?
         mobj_put(&mobj);
         if (!shadow) {
             vmarea_free(new_area);
             return -ENOMEM;
         }
+        mobj_unlock(shadow);
     }
 
     // remove mappings in the specified range if MAP_FIXED is set
@@ -487,6 +487,9 @@ long vmmap_read(vmmap_t *map, const void *vaddr, void *buf, size_t count)
         bytes_read += to_read;
         position = position + to_read;
         pframe_release(&pframe);
+        if (bytes_read == count) {
+            return 0;
+        }
     }
     KASSERT(bytes_read == count);
     return 0;
@@ -529,7 +532,11 @@ long vmmap_write(vmmap_t *map, void *vaddr, const void *buf, size_t count)
         memcpy((char *) pframe->pf_addr + PAGE_OFFSET(position), (char *) buf + bytes_written, to_write);
         bytes_written += to_write;
         position = position + to_write;
+        pframe->pf_dirty = 1;
         pframe_release(&pframe);
+        if (bytes_written == count) {
+            return 0;
+        }
     }
     KASSERT(bytes_written == count);
     return 0;

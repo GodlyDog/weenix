@@ -172,7 +172,7 @@ long s5_file_block_to_disk_block(s5_node_t *sn, size_t file_blocknum,
             s5_release_disk_block(&pframe);
             return block;
         }
-        ((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] = block; // QUESTION: Should this be cast differently?
+        ((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS] = block;
     }
     long retval = ((uint32_t *) pframe->pf_addr)[file_blocknum - S5_NDIRECT_BLOCKS];
     s5_release_disk_block(&pframe);
