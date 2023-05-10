@@ -330,9 +330,6 @@ static ssize_t s5fs_write(vnode_t *vnode, size_t pos, const void *buf,
                           size_t len)
 {
     KASSERT(!S_ISDIR(vnode->vn_mode) && "should be handled at the VFS level");
-    // if (pos > 3807000) {
-    //     dbg(DBG_TEST, "HERE");
-    // }
     s5_node_t* s5n = VNODE_TO_S5NODE(vnode);
     long status = s5_write_file(s5n, pos, buf, len);
     return status;

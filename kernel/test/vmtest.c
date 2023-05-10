@@ -167,6 +167,22 @@ long test_vmmap() {
     vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), ADDR_TO_PN(USER_MEM_HIGH));
     kfree((void *) buf2);
     kfree((void *) receive2);
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
+    vmmap_remove(map, start + 8, 1);
+    count = 0;
+    list_iterate(&map->vmm_list, vma, vmarea_t, vma_plink) {
+        count += 1;
+        if (count == 1) {
+            test_assert(vma->vma_start == area->vma_start, "Start is wrong");
+            test_assert(vma->vma_end == (size_t) (start + 8), "End is wrong");
+            test_assert(vma->vma_off == area->vma_off, "Offset is wrong");
+        } else {
+            test_assert(vma->vma_start == (size_t) (start + 9), "Start is wrong");
+            test_assert(vma->vma_end == (size_t) (start + 32), "End is wrong");
+            test_assert(vma->vma_off == area->vma_off + 9, "Offset is wrong");
+        }
+    }
 
     // shadow testing
 

@@ -19,7 +19,7 @@
  * always be the first thing in this variable. Note that this setting can be
  * changed at runtime by modifying the dbg_modes global variable.
  */
-#define INIT_DBG_MODES "-all,test"
+#define INIT_DBG_MODES "-all,test,vm,syscall"
 
 /* Below is a truly terrible poll-driven serial driver that we use for debugging
  * purposes - it outputs to COM1, but

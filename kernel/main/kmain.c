@@ -165,21 +165,21 @@ static void *initproc_run(long arg1, void *arg2)
     #endif
     char *const argv[] = {NULL}; 
     char *const envp[] = {NULL};
-    //vmtest_main(0, 0); 
-    kernel_execve("/sbin/init", argv, envp);
+    vmtest_main(0, 0); 
+    //kernel_execve("/sbin/init", argv, envp);
         // proctest_main(0, NULL);
         // driverstest_main(0, NULL);
         /* To create a kshell on each terminal */
-    // #ifdef __DRIVERS__
-    //     char name[32] = {0};
-    //     for (long i = 0; i < __NTERMS__; i++)
-    //     {
-    //         snprintf(name, sizeof(name), "kshell%ld", i);
-    //         proc_t *proc = proc_create("ksh");
-    //         kthread_t *thread = kthread_create(proc, kshell_proc_run, i, NULL);
-    //         sched_make_runnable(thread);
-    //     }
-    // #endif
+    #ifdef __DRIVERS__
+        char name[32] = {0};
+        for (long i = 0; i < __NTERMS__; i++)
+        {
+            snprintf(name, sizeof(name), "kshell%ld", i);
+            proc_t *proc = proc_create("ksh");
+            kthread_t *thread = kthread_create(proc, kshell_proc_run, i, NULL);
+            sched_make_runnable(thread);
+        }
+    #endif
 
     /* Run kshell commands until each kshell process exits */
     int status = 0;
