@@ -401,7 +401,7 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             area->vma_off += area->vma_start - old_start;
             dbg(DBG_TEST, "\nSection 1\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(old_start);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage + 1);
+            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
