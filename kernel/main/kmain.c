@@ -163,8 +163,8 @@ static void *initproc_run(long arg1, void *arg2)
         vfs_init();
         make_devices();
     #endif
-    char *argv[2] = {"hello", NULL}; 
-    char *envp[1] = {NULL};
+    char *const argv[] = {NULL}; 
+    char *const envp[] = {NULL};
     //vmtest_main(0, 0); 
     kernel_execve("/sbin/init", argv, envp);
         // proctest_main(0, NULL);

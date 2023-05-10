@@ -144,7 +144,10 @@ static long sys_getdents(getdents_args_t *args)
     size_t bytes_read = 0;
     while(arguments.count > bytes_read) {
         dirent_t dirp;
-        do_getdent(arguments.fd, &dirp);
+        ssize_t read = do_getdent(arguments.fd, &dirp);
+        if (!read) {
+            return bytes_read;
+        }
         bytes_read += sizeof(dirent_t); // QUESTION: Is the dirent_t being copied back to the user here?
         ret = copy_to_user(arguments.dirp, &dirp, sizeof(dirent_t));
         ERROR_OUT_RET(ret);

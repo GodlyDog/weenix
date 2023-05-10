@@ -198,7 +198,8 @@ proc_t *proc_create(const char *name)
         proc_initproc = proc;
     }
     proc->p_pid = pid;
-    for (long unsigned int i = 0; i < strlen(name); i++) {
+    memset(proc->p_name, 0, PROC_NAME_LEN);
+    for (size_t i = 0; i < strlen(name); i++) {
         proc->p_name[i] = name[i];
     }
     proc->p_pml4 = page;
