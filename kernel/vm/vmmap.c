@@ -392,18 +392,19 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
  */
 long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
 {
+    KASSERT(npages > 0);
     size_t endpage = lopage + npages;
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
         if (area->vma_start >= lopage && area->vma_end > endpage) {
             size_t old_start = area->vma_start;
             area->vma_start = endpage;
             area->vma_off += area->vma_start - old_start;
-            dbg(DBG_TEST, "Section 1");
+            dbg(DBG_TEST, "\nSection 1\n");
             uintptr_t vaddr = (uintptr_t) PAGE_ALIGN_DOWN(PN_TO_ADDR(old_start));
-            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(endpage));
+            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(endpage + 1));
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "Section 1 success");
+            dbg(DBG_TEST, "\nSection 1 success\n");
             tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
         } else if (area->vma_start < lopage && area->vma_end > endpage) {
             vmarea_t* new_area = vmarea_alloc();
@@ -420,33 +421,33 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             new_area->vma_vmmap = map;
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
-            dbg(DBG_TEST, "Section 2");
+            dbg(DBG_TEST, "\nSection 2\n");
             uintptr_t vaddr = (uintptr_t) PAGE_ALIGN_DOWN(PN_TO_ADDR(lopage));
-            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(endpage));
+            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(endpage + 1));
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "Section 2 success");
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(lopage));
+            dbg(DBG_TEST, "\nSection 2 success\n");
+            tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start < lopage && area->vma_end > lopage && area->vma_end <= endpage) {
             size_t old_end = area->vma_end;
             area->vma_end = lopage;
-            dbg(DBG_TEST, "Section 3");
+            dbg(DBG_TEST, "\nSection 3\n");
             uintptr_t vaddr = (uintptr_t) PAGE_ALIGN_DOWN(PN_TO_ADDR(lopage));
-            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(old_end));
+            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(old_end + 1));
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "Section 3 success");
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(lopage), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(lopage));
+            dbg(DBG_TEST, "\nSection 3 success\n");
+            tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
             list_remove(&area->vma_plink);
             vmarea_free(area);
-            dbg(DBG_TEST, "Section 4");
+            dbg(DBG_TEST, "\nSection 4\n");
             uintptr_t vaddr = (uintptr_t) PAGE_ALIGN_DOWN(PN_TO_ADDR(area->vma_start));
-            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(area->vma_end));
+            uintptr_t vmax = (uintptr_t) PAGE_ALIGN_UP(PN_TO_ADDR(area->vma_end + 1));
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "Section 4 success");
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(area->vma_end) - (uintptr_t) PN_TO_ADDR(area->vma_start));
+            dbg(DBG_TEST, "\nSection 4 success\n");
+            tlb_flush_range(vaddr, vmax - vaddr);
         }
     }
     return 0;
