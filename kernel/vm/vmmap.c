@@ -402,7 +402,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             dbg(DBG_TEST, "\nSection 1\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(old_start);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage + 1);
-            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
+            KASSERT(vmax > vaddr);
+            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
             dbg(DBG_TEST, "\nSection 1 success\n");
             tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
@@ -424,7 +425,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             dbg(DBG_TEST, "\nSection 2\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage + 1);
-            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
+            KASSERT(vmax > vaddr);
+            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
             dbg(DBG_TEST, "\nSection 2 success\n");
             tlb_flush_range(vaddr, vmax - vaddr);
@@ -434,7 +436,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             dbg(DBG_TEST, "\nSection 3\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(old_end + 1);
-            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
+            KASSERT(vmax > vaddr);
+            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
             dbg(DBG_TEST, "\nSection 3 success\n");
             tlb_flush_range(vaddr, vmax - vaddr);
@@ -444,7 +447,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             dbg(DBG_TEST, "\nSection 4\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(area->vma_start);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end + 1);
-            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax) && vmax > vaddr);
+            KASSERT(vmax > vaddr);
+            KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
             dbg(DBG_TEST, "\nSection 4 success\n");
             tlb_flush_range(vaddr, vmax - vaddr);
