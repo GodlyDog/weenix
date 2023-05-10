@@ -399,13 +399,11 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             size_t old_start = area->vma_start;
             area->vma_start = endpage;
             area->vma_off += area->vma_start - old_start;
-            dbg(DBG_TEST, "\nSection 1\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(old_start);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "\nSection 1 success\n");
             tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
         } else if (area->vma_start < lopage && area->vma_end > endpage) {
             vmarea_t* new_area = vmarea_alloc();
@@ -422,35 +420,29 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             new_area->vma_vmmap = map;
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
-            dbg(DBG_TEST, "\nSection 2\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage + 1);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "\nSection 2 success\n");
             tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start < lopage && area->vma_end > lopage && area->vma_end <= endpage) {
             size_t old_end = area->vma_end;
             area->vma_end = lopage;
-            dbg(DBG_TEST, "\nSection 3\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(old_end + 1);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "\nSection 3 success\n");
             tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
             list_remove(&area->vma_plink);
             vmarea_free(area);
-            dbg(DBG_TEST, "\nSection 4\n");
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(area->vma_start);
             uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end + 1);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            dbg(DBG_TEST, "\nSection 4 success\n");
             tlb_flush_range(vaddr, vmax - vaddr);
         }
     }
@@ -469,6 +461,9 @@ long vmmap_is_range_empty(vmmap_t *map, size_t startvfn, size_t npages)
             return 0;
         }
         if (area->vma_end <= endvfn && area->vma_end > startvfn) {
+            return 0;
+        }
+        if (area->vma_start <= startvfn && area->vma_end >= endvfn) {
             return 0;
         }
     }

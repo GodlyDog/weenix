@@ -189,7 +189,12 @@ long test_vmmap() {
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_PRIVATE | MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(area->vma_obj->mo_type == MOBJ_SHADOW, "Obj type is wrong");
-    mobj_shadow_t* shadow = MOBJ_TO_SO(area->vma_obj);
+    vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), ADDR_TO_PN(USER_MEM_HIGH));
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start+16, 32, PROT_READ, MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
+    test_assert(status == 0, "Vmmap_map failure");
+    test_assert(!vmmap_is_range_empty(map, start+32, 1), "Range should not be empty");
+    
+
 
 
     return 0;
