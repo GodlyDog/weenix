@@ -118,6 +118,7 @@ void shadow_collapse(mobj_t *o)
             mobj_shadow_t* sub_shadow = MOBJ_TO_SO(shadow->shadowed);
             mobj_t* pointer_to_removed = &sub_shadow->mobj;
             shadow->shadowed = sub_shadow->shadowed;
+            KASSERT(pointer_to_removed->mo_refcount);
             mobj_put_locked(&pointer_to_removed);
         }
         current = shadow->shadowed;
@@ -263,7 +264,9 @@ static void shadow_destructor(mobj_t *o)
 {
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
     mobj_default_destructor(o);
+    KASSERT(shadow->shadowed->mo_refcount);
     mobj_put(&shadow->shadowed);
+    KASSERT(shadow->bottom_mobj->mo_refcount);
     mobj_put(&shadow->bottom_mobj);
     slab_obj_free(shadow_allocator, shadow);
 }

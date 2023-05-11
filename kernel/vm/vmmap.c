@@ -214,6 +214,7 @@ void vmmap_collapse(vmmap_t *map)
  */
 vmmap_t *vmmap_clone(vmmap_t *map)
 {
+    dbg(DBG_TEST, "VMMAP CLONE");
     vmmap_t* new_map = vmmap_create();
     if (!new_map) {
         return NULL;
@@ -253,6 +254,7 @@ vmmap_t *vmmap_clone(vmmap_t *map)
         }
         vmmap_insert(new_map, new_area);
     }
+    dbg(DBG_TEST, "VMMAP CLONE FINISHING");
     return new_map;
 }
 
