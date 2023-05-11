@@ -45,7 +45,6 @@ vmarea_t *vmarea_alloc(void)
     area->vma_vmmap = NULL;
     area->vma_obj = NULL;
     list_link_init(&area->vma_plink);
-    // QUESTION: What should these values be, or is this fine?
     return area;
 }
 
@@ -59,6 +58,7 @@ void vmarea_free(vmarea_t *vma)
         list_remove(&vma->vma_plink);
     }
     if (vma->vma_obj) {
+        KASSERT(vma->vma_obj->mo_refcount);
         mobj_put(&vma->vma_obj);
     }
     slab_obj_free(vmarea_allocator, vma);
@@ -247,6 +247,7 @@ vmmap_t *vmmap_clone(vmmap_t *map)
                 return NULL;
             }
             new_area->vma_obj = new_shadow;
+            KASSERT(area->vma_obj->mo_refcount);
             mobj_put(&area->vma_obj);
             area->vma_obj = old_shadow;
         }
@@ -332,6 +333,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     if (flags & MAP_PRIVATE) {
         shadow = shadow_create(mobj);
         new_area->vma_obj = shadow; // QUESTION: Should I be putting the actual mobj and making the area point to the shadow like this?
+        KASSERT(mobj->mo_refcount);
         mobj_put(&mobj);
         if (!shadow) {
             vmarea_free(new_area);
@@ -345,9 +347,10 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
         long status = vmmap_remove(map, lopage, npages);
         if (status < 0) {
             vmarea_free(new_area);
-            mobj_put(&mobj);
             if (shadow) {
                 mobj_put(&shadow);
+            } else {
+                mobj_put(&mobj);
             }
             return status;
         }
