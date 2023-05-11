@@ -77,6 +77,7 @@ mobj_t *shadow_create(mobj_t *shadowed)
     mobj_ref(shadow->bottom_mobj);
     mobj_lock(&shadow->mobj);
     KASSERT(shadow->bottom_mobj->mo_type != MOBJ_SHADOW);
+    KASSERT(shadow->mobj.mo_refcount == 1);
     return &shadow->mobj;
 }
 
@@ -258,5 +259,6 @@ static void shadow_destructor(mobj_t *o)
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
     mobj_default_destructor(o);
     mobj_put(&shadow->shadowed);
+    mobj_put(&shadow->bottom_mobj);
     slab_obj_free(shadow_allocator, shadow);
 }
