@@ -229,7 +229,7 @@ vmmap_t *vmmap_clone(vmmap_t *map)
         new_area->vma_off = area->vma_off;
         new_area->vma_flags = area->vma_flags;
         new_area->vma_prot = area->vma_prot;
-        if (area->vma_flags != MAP_SHARED) {
+        if (!(area->vma_flags & MAP_SHARED)) {
             mobj_lock(area->vma_obj);
             mobj_t* new_shadow = shadow_create(area->vma_obj);
             mobj_unlock(area->vma_obj);
@@ -348,8 +348,10 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
         if (status < 0) {
             vmarea_free(new_area);
             if (shadow) {
+                KASSERT(shadow->mo_refcount);
                 mobj_put(&shadow);
             } else {
+                KASSERT(mobj->mo_refcount);
                 mobj_put(&mobj);
             }
             return status;

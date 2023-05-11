@@ -19,6 +19,7 @@
 #include "mm/mman.h"
 #include "fs/vnode.h"
 #include "vm/shadow.h"
+#include "fs/vfs_syscall.h"
 
 typedef struct mobj_shadow
 {
@@ -231,6 +232,7 @@ long test_vmmap() {
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start+16, 32, PROT_READ, MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(!vmmap_is_range_empty(map, start+32, 1), "Range should not be empty");
+    vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), ADDR_TO_PN(USER_MEM_HIGH) - ADDR_TO_PN(USER_MEM_LOW));
     mobj_t* bottom = &file->f_vnode->vn_mobj;
     mobj_t* shadow1 = shadow_create(bottom);
     mobj_t* shadow2 = shadow_create(shadow1);
@@ -247,6 +249,10 @@ long test_vmmap() {
     test_assert(shob3->shadowed == shadow2, "Removed a shadow object with refcount 2");
     mobj_shadow_t* shob2 = MOBJ_TO_SO(shadow2);
     test_assert(shob2->shadowed == bottom, "Failed to remove a shadow object with refcount 1");
+    mobj_unlock(shadow4);
+    shadow4->mo_ops.destructor(shadow4);
+    shadow3->mo_ops.destructor(shadow3);
+    shadow2->mo_ops.destructor(shadow2);
     return 0;
 }
 
