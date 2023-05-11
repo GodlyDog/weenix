@@ -116,6 +116,8 @@ void shadow_collapse(mobj_t *o)
         mobj_put(&current);
         current = shadow->shadowed;
     }
+    shadow = MOBJ_TO_SO(o);
+    shadow->shadowed = shadow->bottom_mobj;
 }
 
 /*
