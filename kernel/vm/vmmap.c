@@ -395,7 +395,7 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
     KASSERT(npages > 0);
     size_t endpage = lopage + npages;
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
-        if (area->vma_start >= lopage && area->vma_end > endpage) {
+        if (area->vma_start >= lopage && area->vma_end > endpage && endpage > area->vma_start) {
             size_t old_start = area->vma_start;
             area->vma_start = endpage;
             area->vma_off += area->vma_start - old_start;
