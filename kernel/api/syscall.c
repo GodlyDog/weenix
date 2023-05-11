@@ -141,18 +141,18 @@ static long sys_getdents(getdents_args_t *args)
     if (arguments.count < sizeof(dirent_t)) {
         ERROR_OUT_RET(-EINVAL); // What error message here?
     }
-    size_t bytes_read = 0;
-    while(arguments.count > bytes_read) {
+    size_t num_read = 0;
+    while(arguments.count > (num_read * sizeof(dirent_t))) {
         dirent_t dirp;
         ssize_t read = do_getdent(arguments.fd, &dirp);
-        if (!read) {
-            return bytes_read;
+        if (read != sizeof(dirent_t)) {
+            return num_read * sizeof(dirent_t);
         }
-        bytes_read += sizeof(dirent_t); // QUESTION: Is the dirent_t being copied back to the user here?
-        ret = copy_to_user(arguments.dirp, &dirp, sizeof(dirent_t));
+        ret = copy_to_user(arguments.dirp + num_read, &dirp, sizeof(dirent_t));
+        num_read += 1;
         ERROR_OUT_RET(ret);
     }
-    return bytes_read;
+    return num_read * sizeof(dirent_t);
 }
 
 #ifdef __MOUNTING__
