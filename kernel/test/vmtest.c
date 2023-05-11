@@ -80,6 +80,10 @@ long test_vmmap() {
         list_remove(&vma->vma_plink); 
         kfree(vma);
     }
+    
+
+    
+
 
     ssize_t start = vmmap_find_range(map, 16, VMMAP_DIR_LOHI);
     test_assert(start == ADDR_TO_PN(USER_MEM_LOW), "Range is wonky on the lohi portion");
@@ -89,7 +93,29 @@ long test_vmmap() {
     file_t* file = fget(fd);
     size_t off = PAGE_SIZE;
     vmarea_t* area;
-    long status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 16, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+
+    long status;
+    for (size_t i = ADDR_TO_PN(USER_MEM_LOW); i < ADDR_TO_PN(USER_MEM_LOW) + 512; i++) {
+        status = vmmap_map(curproc->p_vmmap, file->f_vnode, i, 1, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
+        test_assert(status == 0, "Vmmap_map failure");
+    }
+
+    for (size_t i = ADDR_TO_PN(USER_MEM_LOW); i < ADDR_TO_PN(USER_MEM_LOW) + 512; i++) {
+        area = vmmap_lookup(curproc->p_vmmap, i);
+        test_assert(area != NULL, "Could not find an area that should be present");
+        area = NULL;
+    }
+
+    vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), 512);
+
+    for (size_t i = ADDR_TO_PN(USER_MEM_LOW); i < ADDR_TO_PN(USER_MEM_LOW) + 512; i++) {
+        area = vmmap_lookup(curproc->p_vmmap, i);
+        test_assert(area == NULL, "There should be no areas");
+        area = NULL;
+    }
+
+
+    status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 16, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(area->vma_start == (size_t) start, "Start is wrong");
     test_assert(area->vma_end == (size_t) (start + 16), "End is wrong");
@@ -101,7 +127,22 @@ long test_vmmap() {
     list_iterate(&map->vmm_list, vma, vmarea_t, vma_plink) {
         test_assert(vma == area, "Not the same area as created");
     }
+    area = vmmap_lookup(curproc->p_vmmap, start);
+    test_assert(area != NULL, "Area should be found");
+    area = vmmap_lookup(curproc->p_vmmap, start - 1);
+    test_assert(area == NULL, "Area should not be found");
+    area = vmmap_lookup(curproc->p_vmmap, start + 16);
+    test_assert(area == NULL, "Area should not be found");
+    area = vmmap_lookup(curproc->p_vmmap, start + 15);
+    test_assert(area != NULL, "Area should be found");
     vmmap_remove(map, start, 16);
+    area = vmmap_lookup(curproc->p_vmmap, start);
+    test_assert(area == NULL, "Area should not be found");
+    area = vmmap_lookup(curproc->p_vmmap, start + 15);
+    test_assert(area == NULL, "Area should not be found");
+    area = vmmap_lookup(curproc->p_vmmap, start + 8);
+    test_assert(area == NULL, "Area should not be found");
+
     test_assert(list_empty(&map->vmm_list), "List not empty");
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_FIXED, off, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
@@ -189,7 +230,7 @@ long test_vmmap() {
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_PRIVATE | MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(area->vma_obj->mo_type == MOBJ_SHADOW, "Obj type is wrong");
-    vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), ADDR_TO_PN(USER_MEM_HIGH));
+    vmmap_remove(map, ADDR_TO_PN(USER_MEM_LOW), ADDR_TO_PN(USER_MEM_HIGH) - ADDR_TO_PN(USER_MEM_LOW));
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start+16, 32, PROT_READ, MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(!vmmap_is_range_empty(map, start+32, 1), "Range should not be empty");

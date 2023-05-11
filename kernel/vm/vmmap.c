@@ -404,7 +404,7 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
-            tlb_flush_range((uintptr_t) PN_TO_ADDR(area->vma_start), (uintptr_t) PN_TO_ADDR(endpage) - (uintptr_t) PN_TO_ADDR(area->vma_start));
+            tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start < lopage && area->vma_end > endpage) {
             vmarea_t* new_area = vmarea_alloc();
             if (!new_area) {
@@ -421,7 +421,7 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage + 1);
+            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
@@ -430,16 +430,16 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             size_t old_end = area->vma_end;
             area->vma_end = lopage;
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(old_end + 1);
+            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(old_end);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
             tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
             list_remove(&area->vma_plink);
-            vmarea_free(area);
             uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(area->vma_start);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end + 1);
+            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end);
+            vmarea_free(area);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
