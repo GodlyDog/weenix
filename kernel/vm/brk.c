@@ -52,8 +52,10 @@
  */
 long do_brk(void *addr, void **ret)
 {
+    dbg(DBG_TEST, "\nSTARTING DO_BRK\n");
     if (!addr) {
         *ret = curproc->p_brk;
+        dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
         return 0;
     }
     if ((uintptr_t) addr > USER_MEM_HIGH) {
@@ -70,6 +72,7 @@ long do_brk(void *addr, void **ret)
         vmmap_map(curproc->p_vmmap, NULL, ADDR_TO_PN(addr), 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
         curproc->p_brk = addr;
         *ret = curproc->p_brk;
+        dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
         return 0;
     } else {
         // change size of heap
@@ -81,6 +84,7 @@ long do_brk(void *addr, void **ret)
             heap->vma_end = endpage;
             curproc->p_brk = addr;
             *ret = curproc->p_brk;
+            dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
             return 0;
         } else {
             // shrink heap
@@ -89,6 +93,7 @@ long do_brk(void *addr, void **ret)
             // QUESTION: Zero out the freed space?
             curproc->p_brk = addr;
             *ret = curproc->p_brk;
+            dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
             return 0;
         }
     }

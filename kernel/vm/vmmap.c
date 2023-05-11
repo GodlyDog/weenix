@@ -214,7 +214,6 @@ void vmmap_collapse(vmmap_t *map)
  */
 vmmap_t *vmmap_clone(vmmap_t *map)
 {
-    dbg(DBG_TEST, "VMMAP CLONE");
     vmmap_t* new_map = vmmap_create();
     if (!new_map) {
         return NULL;
@@ -254,7 +253,6 @@ vmmap_t *vmmap_clone(vmmap_t *map)
         }
         vmmap_insert(new_map, new_area);
     }
-    dbg(DBG_TEST, "VMMAP CLONE FINISHING");
     return new_map;
 }
 
@@ -309,7 +307,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     }
     // set the fields of the new area
     new_area->vma_end = start + npages;
-    new_area->vma_off = ADDR_TO_PN((char *) PN_TO_ADDR(lopage) + off) - lopage;
+    new_area->vma_off = ADDR_TO_PN((char *) PN_TO_ADDR(start) + off) - start;
     new_area->vma_flags = flags;
     new_area->vma_prot = prot;
     new_area->vma_vmmap = map;

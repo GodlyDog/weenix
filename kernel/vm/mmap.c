@@ -55,6 +55,7 @@
 long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
              void **ret)
 {
+    dbg(DBG_TEST, "\nSTARTING DO_MMAP\n");
     // all EINVAL cases
     if (len <= 0 || off < 0) {
         return -EINVAL;
@@ -83,12 +84,6 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         if (!file->f_vnode->vn_ops->mmap) {
             return -ENODEV;
         }
-
-        // EACCES cases
-        // if (!S_ISREG(file->f_vnode->vn_mode)) {
-        //     return -EACCES;
-        // }
-        // QUESTION: How to check if it is a regular file?
         if (!(file->f_mode & FMODE_READ)) {
             return -EACCES;
         }
@@ -110,6 +105,7 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
     if (ret) {
         *ret = PN_TO_ADDR(new_vma->vma_start);
     }
+    dbg(DBG_TEST, "\nFINISHED DO_MMAP SUCCESSFULLY\n");
     return 0;
 }
 

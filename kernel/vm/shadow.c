@@ -97,7 +97,6 @@ mobj_t *shadow_create(mobj_t *shadowed)
  */
 void shadow_collapse(mobj_t *o)
 {
-    dbg(DBG_TEST, "\nSHADOW COLLAPSE\n");
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
     mobj_t* current = o;
     while (current != NULL && shadow->shadowed->mo_type == MOBJ_SHADOW) {
@@ -121,11 +120,9 @@ void shadow_collapse(mobj_t *o)
             shadow->shadowed = sub_shadow->shadowed;
             KASSERT(pointer_to_removed->mo_refcount);
             mobj_put_locked(&pointer_to_removed);
-            dbg(DBG_TEST, "\nSHADOW COLLAPSE REMOVED A SHADOW OBJECT SUCCESSFULLY\n");
         }
         current = shadow->shadowed;
     }
-    dbg(DBG_TEST, "\nSHADOW COLLAPSE FINISHED\n");
 }
 
 /*
@@ -167,6 +164,11 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
         KASSERT(kmutex_owns_mutex(&o->mo_mutex));
         return status;
     } else {
+        mobj_find_pframe(o, pagenum, pfp);
+        if (*pfp) {
+            KASSERT(kmutex_owns_mutex(&o->mo_mutex));
+            return 0;
+        }
         mobj_t* current = shadow->shadowed;
         while (current != NULL && current->mo_type == MOBJ_SHADOW) {
             mobj_lock(current);

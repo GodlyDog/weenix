@@ -49,7 +49,7 @@ mobj_t *anon_create()
  */
 static long anon_fill_pframe(mobj_t *o, pframe_t *pf)
 {
-    memset(pf->pf_addr, 0, PAGE_SIZE); // QUESTION: What should the pframe look like for an anonymous object?
+    memset(pf->pf_addr, 0, PAGE_SIZE);
     return 0;
 }
 
