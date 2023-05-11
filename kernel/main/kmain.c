@@ -165,8 +165,8 @@ static void *initproc_run(long arg1, void *arg2)
     #endif
     char *const argv[] = {NULL}; 
     char *const envp[] = {NULL};
-    //vmtest_main(0, 0);
-    kernel_execve("/usr/bin/hello", argv, envp);
+    vmtest_main(0, 0);
+    //kernel_execve("/usr/bin/hello", argv, envp);
         // proctest_main(0, NULL);
         // driverstest_main(0, NULL);
         /* To create a kshell on each terminal */

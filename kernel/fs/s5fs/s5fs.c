@@ -562,6 +562,7 @@ static long s5fs_rename(vnode_t *olddir, const char *oldname, size_t oldnamelen,
             return -EISDIR;
         }
         s5_remove_dirent(new_s5n, newname, newnamelen, VNODE_TO_S5NODE(new_vnode));
+        vunlock(new_vnode);
     }
     s5_link(new_s5n, newname, newnamelen, VNODE_TO_S5NODE(old_vnode));
     s5_remove_dirent(old_s5n, oldname, oldnamelen, VNODE_TO_S5NODE(old_vnode));

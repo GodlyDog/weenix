@@ -98,27 +98,30 @@ mobj_t *shadow_create(mobj_t *shadowed)
 void shadow_collapse(mobj_t *o)
 {
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
-    mobj_t* current = shadow->shadowed;
-    while (current != NULL && current->mo_type == MOBJ_SHADOW) {
-        list_iterate(&current->mo_pframes, frame, pframe_t, pf_link) {
-            pframe_t* found = NULL;
-            mobj_lock(o);
-            mobj_find_pframe(o, frame->pf_pagenum, &found);
-            mobj_unlock(o);
-            list_remove(&frame->pf_link);
-            if (!found) {
-                list_insert_tail(&o->mo_pframes, &frame->pf_link);
-            } else {
-                pframe_release(&found);
-            }
-        }
+    mobj_t* current = o;
+    while (current != NULL && shadow->shadowed->mo_type == MOBJ_SHADOW) {
         shadow = MOBJ_TO_SO(current);
-        KASSERT(current->mo_refcount == 1);
-        mobj_put(&current);
+        if (shadow->shadowed->mo_refcount == 1) {
+            mobj_lock(shadow->shadowed);
+            list_iterate(&shadow->shadowed->mo_pframes, frame, pframe_t, pf_link) {
+                pframe_t* found = NULL;
+                mobj_lock(current);
+                mobj_find_pframe(current, frame->pf_pagenum, &found);
+                mobj_unlock(current);
+                list_remove(&frame->pf_link);
+                if (!found) {
+                    list_insert_tail(&current->mo_pframes, &frame->pf_link);
+                } else {
+                    pframe_release(&found);
+                }
+            }
+            mobj_shadow_t* sub_shadow = MOBJ_TO_SO(shadow->shadowed);
+            mobj_t* pointer_to_removed = &sub_shadow->mobj;
+            shadow->shadowed = sub_shadow->shadowed;
+            mobj_put_locked(&pointer_to_removed);
+        }
         current = shadow->shadowed;
     }
-    shadow = MOBJ_TO_SO(o);
-    shadow->shadowed = shadow->bottom_mobj;
 }
 
 /*
@@ -152,10 +155,12 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
     KASSERT(shadow->bottom_mobj->mo_type != MOBJ_SHADOW);
     KASSERT(shadow->shadowed != o);
+    KASSERT(kmutex_owns_mutex(&o->mo_mutex));
     if (forwrite) {
         kmutex_lock(&shadow->bottom_mobj->mo_mutex);
         long status = mobj_default_get_pframe(shadow->bottom_mobj, pagenum, 1, pfp); // QUESTION: Should I be calling this on the bottom mobj?
         kmutex_unlock(&shadow->bottom_mobj->mo_mutex);
+        KASSERT(kmutex_owns_mutex(&o->mo_mutex));
         return status;
     } else {
         mobj_t* current = shadow->shadowed;
@@ -164,6 +169,7 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
             mobj_find_pframe(current, pagenum, pfp);
             mobj_unlock(current);
             if (*pfp) {
+                KASSERT(kmutex_owns_mutex(&o->mo_mutex));
                 return 0;
             }
             shadow = MOBJ_TO_SO(current);
@@ -173,6 +179,7 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
         mobj_lock(current);
         long status = mobj_get_pframe(current, pagenum, 0, pfp);
         mobj_unlock(current);
+        KASSERT(kmutex_owns_mutex(&o->mo_mutex));
         return status;
     }
 }
@@ -203,6 +210,7 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
     mobj_t* current = shadow->shadowed;
     pframe_t* found;
+    KASSERT(kmutex_owns_mutex(&o->mo_mutex));
     while (current != NULL && current->mo_type == MOBJ_SHADOW) {
         mobj_lock(current);
         mobj_find_pframe(current, pf->pf_pagenum, &found);
@@ -210,12 +218,12 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
         if (found) {
             memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
             pframe_release(&found);
+            KASSERT(kmutex_owns_mutex(&o->mo_mutex));
             return 0;
         }
         shadow = MOBJ_TO_SO(current);
         current = shadow->shadowed;
     }
-    long owns = kmutex_owns_mutex(&current->mo_mutex);
     mobj_lock(current);
     long status = mobj_get_pframe(current, pf->pf_pagenum, 0, &found);
     mobj_unlock(current);
@@ -223,6 +231,7 @@ static long shadow_fill_pframe(mobj_t *o, pframe_t *pf)
         memcpy(pf->pf_addr, found->pf_addr, PAGE_SIZE);
         pframe_release(&found);
     }
+    KASSERT(kmutex_owns_mutex(&o->mo_mutex));
     return status;
 }
 

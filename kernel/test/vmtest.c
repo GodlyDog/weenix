@@ -18,6 +18,7 @@
 #include "fs/fcntl.h"
 #include "mm/mman.h"
 #include "fs/vnode.h"
+#include "vm/shadow.h"
 
 typedef struct mobj_shadow
 {
@@ -34,6 +35,7 @@ typedef struct mobj_shadow
 } mobj_shadow_t;
 
 #define MOBJ_TO_SO(o) CONTAINER_OF(o, mobj_shadow_t, mobj)
+
 
 long test_vmmap() {
     vmmap_t *map = curproc->p_vmmap;
@@ -80,11 +82,6 @@ long test_vmmap() {
         list_remove(&vma->vma_plink); 
         kfree(vma);
     }
-    
-
-    
-
-
     ssize_t start = vmmap_find_range(map, 16, VMMAP_DIR_LOHI);
     test_assert(start == ADDR_TO_PN(USER_MEM_LOW), "Range is wonky on the lohi portion");
     ssize_t other_start = vmmap_find_range(map, 16, VMMAP_DIR_HILO);
@@ -226,7 +223,7 @@ long test_vmmap() {
     }
 
     // shadow testing
-
+    vmmap_remove(map, start, 512);
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start, 32, PROT_READ, MAP_PRIVATE | MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(area->vma_obj->mo_type == MOBJ_SHADOW, "Obj type is wrong");
@@ -234,10 +231,22 @@ long test_vmmap() {
     status = vmmap_map(curproc->p_vmmap, file->f_vnode, start+16, 32, PROT_READ, MAP_FIXED, 0, VMMAP_DIR_HILO, &area);
     test_assert(status == 0, "Vmmap_map failure");
     test_assert(!vmmap_is_range_empty(map, start+32, 1), "Range should not be empty");
-    
-
-
-
+    mobj_t* bottom = &file->f_vnode->vn_mobj;
+    mobj_t* shadow1 = shadow_create(bottom);
+    mobj_t* shadow2 = shadow_create(shadow1);
+    mobj_t* shadow3 = shadow_create(shadow2);
+    mobj_t* shadow4 = shadow_create(shadow2);
+    mobj_unlock(shadow1);
+    mobj_unlock(shadow2);
+    mobj_unlock(shadow3);
+    mobj_put(&shadow1);
+    shadow_collapse(shadow4);
+    mobj_shadow_t* shob4 = MOBJ_TO_SO(shadow4);
+    test_assert(shob4->shadowed == shadow2, "Removed a shadow object with refcount 2");
+    mobj_shadow_t* shob3 = MOBJ_TO_SO(shadow3);
+    test_assert(shob3->shadowed == shadow2, "Removed a shadow object with refcount 2");
+    mobj_shadow_t* shob2 = MOBJ_TO_SO(shadow2);
+    test_assert(shob2->shadowed == bottom, "Failed to remove a shadow object with refcount 1");
     return 0;
 }
 
