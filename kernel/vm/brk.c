@@ -69,10 +69,18 @@ long do_brk(void *addr, void **ret)
     }
     size_t lopage = ADDR_TO_PN(PAGE_ALIGN_UP(addr));
     size_t endpage = lopage + 1;
+    // QUESTION: Should a process have a start_brk when it is created? I don't think it should be initialized to zero, but that is what seems to happen.
     if (curproc->p_brk == curproc->p_start_brk) {
         // create a heap
         dbg(DBG_TEST, "\nCREATING HEAP\n");
-        vmmap_map(curproc->p_vmmap, NULL, lopage, 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
+        if (!vmmap_is_range_empty(curproc->p_vmmap, lopage, 1)) {
+            return -ENOMEM;
+        }
+        long status = vmmap_map(curproc->p_vmmap, NULL, lopage, 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
+        // QUESTION: What if this range is already taken?
+        if (status < 0) {
+            return status;
+        }
         curproc->p_start_brk = addr;
         curproc->p_brk = PN_TO_ADDR(endpage);
         if (ret) {
