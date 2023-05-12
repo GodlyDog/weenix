@@ -57,12 +57,15 @@ static uintptr_t fork_setup_stack(const regs_t *regs, void *kstack)
  */
 long do_fork(struct regs *regs)
 {
+    dbg(DBG_TEST, "\nDO_FORK STARTING\n");
     proc_t* proc = proc_create(curproc->p_name);
     if (!proc) {
+        dbg(DBG_TEST, "\nDO_FORK FAILING\n");
         return -ENOMEM;
     }
     kthread_t* thread = kthread_clone(curthr);
     if (!thread) {
+        dbg(DBG_TEST, "\nDO_FORK FAILING\n");
         proc_destroy(proc);
         return -ENOMEM;
     }
@@ -76,5 +79,6 @@ long do_fork(struct regs *regs)
     pt_unmap_range(curproc->p_pml4, USER_MEM_LOW, USER_MEM_HIGH);
     tlb_flush_all();
     sched_make_runnable(thread);
+    dbg(DBG_TEST, "\nDO_FORK FINISHING\n");
     return proc->p_pid;
 }

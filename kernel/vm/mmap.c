@@ -58,54 +58,65 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
     dbg(DBG_TEST, "\nSTARTING DO_MMAP\n");
     // all EINVAL cases
     if (len <= 0 || off < 0) {
+        dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
     if (!(flags & MAP_PRIVATE) && !(flags & MAP_SHARED)) {
+        dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
     if (!PAGE_ALIGNED(off)) {
+        dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
     if (!PAGE_ALIGNED(addr) && (flags & MAP_FIXED)) {
+        dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
     file_t* file = curproc->p_files[fd];
 
     // the EBADF case
     if (!file && !(flags & MAP_ANON)) {
+        dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EBADF;
     }
 
     // all ENODEV cases
     if (file) {
         if (!file->f_vnode->vn_ops) {
+            dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
             return -ENODEV;
         }
         if (!file->f_vnode->vn_ops->mmap) {
+            dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
             return -ENODEV;
         }
         if (!(file->f_mode & FMODE_READ)) {
+            dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
             return -EACCES;
         }
         if ((file->f_mode & FMODE_APPEND) && (prot & PROT_WRITE)) {
+            dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
             return -EACCES;
         }
         if (!(file->f_mode & FMODE_READ || file->f_mode & FMODE_WRITE) && (flags & MAP_SHARED) && (prot & PROT_WRITE)) {
+            dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
             return -EACCES;
         }
     }
-    size_t lopage = ADDR_TO_PN(addr);
+    size_t lopage = ADDR_TO_PN(PAGE_ALIGN_DOWN(addr));
     size_t npages = ADDR_TO_PN((uintptr_t) addr + len) + 1 - lopage;
     vmarea_t* new_vma;
     long status = vmmap_map(curproc->p_vmmap, file->f_vnode, lopage, npages, prot, flags, off, VMMAP_DIR_HILO, &new_vma);
     if (status < 0) {
+        dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return status;
     }
     tlb_flush_range(new_vma->vma_start, new_vma->vma_end - new_vma->vma_start);
     if (ret) {
         *ret = PN_TO_ADDR(new_vma->vma_start);
     }
-    dbg(DBG_TEST, "\nFINISHED DO_MMAP SUCCESSFULLY\n");
+    dbg(DBG_TEST, "\nFINISHED DO_MMAP\n");
     return 0;
 }
 

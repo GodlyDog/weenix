@@ -54,45 +54,58 @@ long do_brk(void *addr, void **ret)
 {
     dbg(DBG_TEST, "\nSTARTING DO_BRK\n");
     if (!addr) {
+        // QUESTION: What about when there is no heap?
         *ret = curproc->p_brk;
         dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
-        return curproc->p_brk;
+        return 0;
     }
     if ((uintptr_t) addr > USER_MEM_HIGH) {
+        dbg(DBG_TEST, "\nDO_BRK FAILING\n");
         return -ENOMEM;
     }
     if (addr < curproc->p_start_brk) {
+        dbg(DBG_TEST, "\nDO_BRK FAILING\n");
         return -ENOMEM;
     }
-    size_t lopage = ADDR_TO_PN(curproc->p_brk);
-    size_t endpage = ADDR_TO_PN(addr) + 1;
-    vmarea_t* heap = vmmap_lookup(curproc->p_vmmap, ADDR_TO_PN(curproc->p_start_brk));
-    if (!heap) {
+    size_t lopage = ADDR_TO_PN(PAGE_ALIGN_UP(addr));
+    size_t endpage = lopage + 1;
+    if (curproc->p_brk == curproc->p_start_brk) {
         // create a heap
-        vmmap_map(curproc->p_vmmap, NULL, ADDR_TO_PN(addr), 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
-        curproc->p_brk = addr;
-        *ret = curproc->p_brk;
+        dbg(DBG_TEST, "\nCREATING HEAP\n");
+        vmmap_map(curproc->p_vmmap, NULL, lopage, 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
+        curproc->p_start_brk = addr;
+        curproc->p_brk = PN_TO_ADDR(endpage);
+        if (ret) {
+            *ret = curproc->p_brk;
+        }
         dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
         return 0;
     } else {
         // change size of heap
+        vmarea_t* heap = vmmap_lookup(curproc->p_vmmap, ADDR_TO_PN(PAGE_ALIGN_UP(curproc->p_start_brk)));
+        KASSERT(heap);
         if (heap->vma_end <= endpage) {
-            // grow heap
-            if (!vmmap_is_range_empty(curproc->p_vmmap, lopage, endpage - lopage)) {
+            dbg(DBG_TEST, "\nGROWING HEAP\n");
+            // grow heap    
+            if (!vmmap_is_range_empty(curproc->p_vmmap, heap->vma_end, endpage - heap->vma_end)) {
+                dbg(DBG_TEST, "\nDO_BRK FAILING\n");
                 return -ENOMEM;
             }
             heap->vma_end = endpage;
-            curproc->p_brk = addr;
-            *ret = curproc->p_brk;
+            curproc->p_brk = PAGE_ALIGN_UP(addr);
+            if (ret) {
+                *ret = curproc->p_brk;
+            }
             dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
             return 0;
         } else {
             // shrink heap
-            // vmmap_remove(curproc->p_vmmap, endpage, heap->vma_end);
-            heap->vma_end = endpage;
-            // QUESTION: Zero out the freed space?
-            curproc->p_brk = addr;
-            *ret = curproc->p_brk;
+            dbg(DBG_TEST, "\nSHRINKING HEAP\n");
+            vmmap_remove(curproc->p_vmmap, endpage, heap->vma_end - endpage);
+            curproc->p_brk = PAGE_ALIGN_UP(addr);
+            if (ret) {
+                *ret = curproc->p_brk;
+            }
             dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
             return 0;
         }

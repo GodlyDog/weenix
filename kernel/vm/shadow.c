@@ -158,9 +158,7 @@ static long shadow_get_pframe(mobj_t *o, size_t pagenum, long forwrite,
     KASSERT(shadow->shadowed != o);
     KASSERT(kmutex_owns_mutex(&o->mo_mutex));
     if (forwrite) {
-        kmutex_lock(&shadow->bottom_mobj->mo_mutex);
-        long status = mobj_default_get_pframe(shadow->bottom_mobj, pagenum, 1, pfp); // QUESTION: Should I be calling this on the bottom mobj?
-        kmutex_unlock(&shadow->bottom_mobj->mo_mutex);
+        long status = mobj_default_get_pframe(o, pagenum, 1, pfp);
         KASSERT(kmutex_owns_mutex(&o->mo_mutex));
         return status;
     } else {
