@@ -219,6 +219,7 @@ vmmap_t *vmmap_clone(vmmap_t *map)
         return NULL;
     }
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
+        int old_refcount = area->vma_obj->mo_refcount;
         vmarea_t* new_area = vmarea_alloc();
         if (!new_area) {
             vmmap_destroy(&new_map);
@@ -250,6 +251,9 @@ vmmap_t *vmmap_clone(vmmap_t *map)
             KASSERT(area->vma_obj->mo_refcount);
             mobj_put(&area->vma_obj);
             area->vma_obj = old_shadow;
+        } else {
+            new_area->vma_obj = area->vma_obj;
+            mobj_ref(area->vma_obj);
         }
         vmmap_insert(new_map, new_area);
     }

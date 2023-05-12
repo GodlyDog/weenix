@@ -56,7 +56,7 @@ long do_brk(void *addr, void **ret)
     if (!addr) {
         *ret = curproc->p_brk;
         dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
-        return 0;
+        return curproc->p_brk;
     }
     if ((uintptr_t) addr > USER_MEM_HIGH) {
         return -ENOMEM;
