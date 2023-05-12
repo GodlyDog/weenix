@@ -87,65 +87,100 @@ static int test_mmap_bounds(void)
         NULL);
     /* Make sure we can actually access these addresses */
     test_assert('\0' == *(char *)addr, NULL);
+    printf("\nPOINT 1\n");
     test_assert('\0' == *((char *)addr + PAGE_SIZE), NULL);
+    printf("\nPOINT 2\n");
     test_assert('\0' == *((char *)addr + PAGE_SIZE * 2), NULL);
+    printf("\nPOINT 3\n");
     test_assert('\0' == *((char *)addr + PAGE_SIZE * 3 - 1), NULL);
+    printf("\nPOINT 4\n");
 
     /* Unmap the ends */
     test_assert(0 == munmap(addr, PAGE_SIZE), NULL);
+    printf("\nPOINT 5\n");
     test_assert(0 == munmap((char *)addr + PAGE_SIZE * 2, PAGE_SIZE), NULL);
+    printf("\nPOINT 6\n");
 
     /* Adjust to center, now surrounded by unmapped regions */
     addr = (char *)addr + PAGE_SIZE;
+    printf("\nPOINT 6.5\n");
 
     /* Make sure we didn't unmap the middle */
     test_assert('\0' == *((char *)addr), NULL);
+    printf("\nPOINT 7\n");
     test_assert('\0' == *((char *)addr + PAGE_SIZE - 1), NULL);
+    printf("\nPOINT 8\n");
     assert_nofault(*(char *)addr = 'a', "");
+    printf("\nPOINT 9\n");
     assert_nofault(*((char *)addr + PAGE_SIZE - 1) = 'b', "");
+    printf("\nPOINT 10\n");
 
     /* Regions around it are unmapped */
     assert_fault(char foo = *((char *)addr + PAGE_SIZE), "");
+    printf("\nPOINT 11\n");
     assert_fault(char foo = *((char *)addr - PAGE_SIZE), "");
+    printf("\nPOINT 12\n");
     assert_fault(char foo = *((char *)addr - 1), "");
+    printf("\nPOINT 13\n");
     assert_fault(*((char *)addr + PAGE_SIZE) = 'a', "");
+    printf("\nPOINT 14\n");
     assert_fault(*((char *)addr - 1) = 'a', "");
+    printf("\nPOINT 15\n");
     assert_fault(*((char *)addr + PAGE_SIZE * 2 - 1) = 'a', "");
+    printf("\nPOINT 16\n");
 
     /* Remap as read-only */
     test_assert(
         addr == mmap(addr, 1, PROT_READ, MAP_PRIVATE | MAP_FIXED, fd, 0), NULL);
+        printf("\nPOINT 17\n");
 
     assert_fault(*((char *)addr) = 'a', "");
+    printf("\nPOINT 18\n");
     assert_fault(*((char *)addr + PAGE_SIZE - 1) = 'a', "");
+    printf("\nPOINT 19\n");
 
     /* "Unmap" */
     test_assert(0 == munmap((char *)addr - PAGE_SIZE, PAGE_SIZE), NULL);
+    printf("\nPOINT 20\n");
     test_assert(0 == munmap((char *)addr + PAGE_SIZE, PAGE_SIZE), NULL);
+    printf("\nPOINT 21\n");
 
     /* Make sure it's still there, also that it's overwritten */
     test_assert('\0' == *((char *)addr), NULL);
+    printf("\nPOINT 22\n");
     test_assert('\0' == *((char *)addr + PAGE_SIZE - 1), NULL);
+    printf("\nPOINT 23\n");
 
     /* Unmap for real */
     test_assert(0 == munmap(addr, 1), NULL);
+    printf("\nPOINT 24\n");
 
     assert_fault(char foo = *(char *)addr, "");
+    printf("\nPOINT 25\n");
     assert_fault(char foo = *((char *)addr + PAGE_SIZE - 1), "");
+    printf("\nPOINT 26\n");
 
     /* Test fun permissions */
     test_assert(addr == mmap(addr, PAGE_SIZE, PROT_EXEC,
                              MAP_PRIVATE | MAP_FIXED, fd, 0),
                 NULL);
+    printf("\nPOINT 27\n");
     assert_fault(char foo = *(char *)addr, "");
+    printf("\nPOINT 28\n");
     assert_fault(char foo = *((char *)addr + PAGE_SIZE - 1), "");
+    printf("\nPOINT 29\n");
     assert_fault(*((char *)addr) = 'a', "");
+    printf("\nPOINT 30\n");
 
     test_assert(
         addr == mmap(addr, PAGE_SIZE, 0, MAP_PRIVATE | MAP_FIXED, fd, 0), NULL);
+        printf("\nPOINT 31\n");
     assert_fault(char foo = *(char *)addr, "");
+    printf("\nPOINT 32\n");
     assert_fault(char foo = *((char *)addr + PAGE_SIZE - 1), "");
+    printf("\nPOINT 33\n");
     assert_fault(*((char *)addr) = 'a', "");
+    printf("\nPOINT 34\n");
 
     return 0;
 }

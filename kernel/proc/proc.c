@@ -218,6 +218,8 @@ proc_t *proc_create(const char *name)
     spinlock_lock(&proc_list_lock);
     list_insert_head(&proc_list, &proc->p_list_link);
     proc->p_cwd = curproc->p_cwd;
+    proc->p_brk = curproc->p_brk;
+    proc->p_start_brk = curproc->p_start_brk;
     if (proc->p_cwd) {
         vref(curproc->p_cwd);
     }

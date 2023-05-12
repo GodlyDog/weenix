@@ -73,7 +73,10 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
-    file_t* file = curproc->p_files[fd];
+    file_t* file = NULL;
+    if (fd >= 0) {
+        file = curproc->p_files[fd];
+    }
 
     // the EBADF case
     if (!file && !(flags & MAP_ANON)) {
@@ -105,14 +108,18 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         }
     }
     size_t lopage = ADDR_TO_PN(PAGE_ALIGN_DOWN(addr));
-    size_t npages = ADDR_TO_PN((uintptr_t) addr + len) + 1 - lopage;
+    size_t npages = ADDR_TO_PN(PAGE_ALIGN_UP((uintptr_t) addr + len)) - lopage;
     vmarea_t* new_vma;
-    long status = vmmap_map(curproc->p_vmmap, file->f_vnode, lopage, npages, prot, flags, off, VMMAP_DIR_HILO, &new_vma);
+    vnode_t* node = NULL;
+    if (file) {
+        node = file->f_vnode;
+    }
+    long status = vmmap_map(curproc->p_vmmap, node, lopage, npages, prot, flags, off, VMMAP_DIR_HILO, &new_vma);
     if (status < 0) {
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return status;
     }
-    tlb_flush_range(new_vma->vma_start, new_vma->vma_end - new_vma->vma_start);
+    tlb_flush_range((uintptr_t) PN_TO_ADDR(new_vma->vma_start), (new_vma->vma_end - new_vma->vma_start) * PAGE_SIZE);
     if (ret) {
         *ret = PN_TO_ADDR(new_vma->vma_start);
     }
@@ -145,9 +152,14 @@ long do_munmap(void *addr, size_t len)
     if (len == 0) {
         return -EINVAL;
     }
-    // QUESTION: How do I check the range of the user address space?
+    if ((uintptr_t) addr < USER_MEM_LOW) {
+        return -EINVAL;
+    }
+    if ((uintptr_t) addr + len > USER_MEM_HIGH) {
+        return -EINVAL;
+    }
     size_t lopage = ADDR_TO_PN(addr);
-    size_t endpage = ADDR_TO_PN((uintptr_t) addr + len) + 1;
+    size_t endpage = ADDR_TO_PN(PAGE_ALIGN_UP((uintptr_t) addr + len));
     KASSERT(lopage != endpage); // Your math is bad
     long status = vmmap_remove(curproc->p_vmmap, lopage, endpage - lopage);
     return status;

@@ -408,8 +408,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             size_t old_start = area->vma_start;
             area->vma_start = endpage;
             area->vma_off += area->vma_start - old_start;
-            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(old_start);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end);
+            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
+            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
@@ -429,8 +429,8 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             new_area->vma_vmmap = map;
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
-            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage);
+            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(area->vma_start);
+            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(new_area->vma_end);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
