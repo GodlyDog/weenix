@@ -82,7 +82,7 @@ long do_brk(void *addr, void **ret)
         if (status < 0) {
             return status;
         }
-        curproc->p_brk = PN_TO_ADDR(endpage);
+        curproc->p_brk = PAGE_ALIGN_UP(addr);
         if (ret) {
             *ret = curproc->p_brk;
         }

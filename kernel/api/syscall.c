@@ -104,22 +104,18 @@ static long sys_write(write_args_t *args)
     write_args_t arguments;
     long ret = copy_from_user(&arguments, args, sizeof(arguments));
     ERROR_OUT_RET(ret);
-    size_t npages = 1;
-    while (npages * PAGE_SIZE < arguments.nbytes) {
-        npages += 1;
-    }
-    char* buffer = page_alloc_n(npages);
-    if (!buffer) {
-        ret = -ENOMEM;
-        ERROR_OUT_RET(ret);
-    }
-    for (size_t i = 0; i < arguments.nbytes; i++) {
-        buffer[i] = ((char *) arguments.buf)[i];
-    }
-    ret = do_write(arguments.fd, buffer, arguments.nbytes);
+    // char* buffer = kmalloc(arguments.nbytes);
+    // if (!buffer) {
+    //     ret = -ENOMEM;
+    //     ERROR_OUT_RET(ret);
+    // }
+    // for (size_t i = 0; i < arguments.nbytes; i++) {
+    //     buffer[i] = ((char *) arguments.buf)[i];
+    // }
+    ret = do_write(arguments.fd, arguments.buf, arguments.nbytes);
     ssize_t bytes_written = ret;
     ERROR_OUT_RET(ret);
-    page_free_n(buffer, npages);
+    //kfree(buffer);
     return bytes_written;
 }
 
