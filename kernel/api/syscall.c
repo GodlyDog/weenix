@@ -113,9 +113,7 @@ static long sys_write(write_args_t *args)
         ret = -ENOMEM;
         ERROR_OUT_RET(ret);
     }
-    for (size_t i = 0; i < arguments.nbytes; i++) {
-        buffer[i] = ((char *) arguments.buf)[i];
-    }
+    ret = copy_from_user(buffer, arguments.buf, arguments.nbytes);
     ret = do_write(arguments.fd, buffer, arguments.nbytes);
     ssize_t bytes_written = ret;
     ERROR_OUT_RET(ret);
