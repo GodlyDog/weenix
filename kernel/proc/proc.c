@@ -252,7 +252,6 @@ proc_t *proc_create(const char *name)
  */
 void proc_cleanup(long status)
 {
-    curproc->p_status = status;
     curproc->p_state = PROC_DEAD;
     for (int fd = 0; fd < NFILES; fd++)
     {
@@ -449,6 +448,7 @@ pid_t do_waitpid(pid_t pid, int *status, int options) {
  */
 void do_exit(long status)
 {
+    // keep this line I think
     curproc->p_status = status;
     kthread_exit(&status);
 }

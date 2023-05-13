@@ -50,8 +50,6 @@ void handle_pagefault(uintptr_t vaddr, uintptr_t cause)
     dbg(DBG_VM, "vaddr = 0x%p (0x%p), cause = %lu\n", (void *)vaddr,
         PAGE_ALIGN_DOWN(vaddr), cause);
     size_t page = ADDR_TO_PN(vaddr);
-    KASSERT(vaddr >= USER_MEM_LOW);
-    KASSERT(vaddr <= USER_MEM_HIGH);
     if (vaddr < USER_MEM_LOW) {
         do_exit(EFAULT);
     }

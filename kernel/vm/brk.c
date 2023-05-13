@@ -77,7 +77,8 @@ long do_brk(void *addr, void **ret)
         if (!vmmap_is_range_empty(curproc->p_vmmap, lopage, endpage - lopage)) {
             return -ENOMEM;
         }
-        long status = vmmap_map(curproc->p_vmmap, NULL, lopage, endpage - lopage, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, NULL);
+        vmarea_t* area;
+        long status = vmmap_map(curproc->p_vmmap, NULL, lopage, endpage - lopage, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, PAGE_OFFSET(addr), VMMAP_DIR_HILO, &area);
         if (status < 0) {
             return status;
         }

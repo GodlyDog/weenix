@@ -139,7 +139,7 @@ long addr_perm(proc_t *p, const void *vaddr, int perm)
 long range_perm(proc_t *p, const void *vaddr, size_t len, int perm)
 {
     size_t start = ADDR_TO_PN(vaddr);
-    size_t end = ADDR_TO_PN((char *) vaddr + len) + 1; // QUESTION: Is this enough to always guarantee that all of the desired region is covered? Should be plus one?
+    size_t end = ADDR_TO_PN(PAGE_ALIGN_UP((uintptr_t) vaddr + len));
     for (size_t i = start; i < end; i++) {
         long granted = addr_perm(p, PN_TO_ADDR(i), perm);
         if (!granted) {

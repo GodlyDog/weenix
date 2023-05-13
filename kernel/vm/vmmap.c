@@ -332,13 +332,13 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
         return -ENOMEM;
     }
 
-    new_area->vma_obj = mobj; // QUESTION: Is this the right mobj for the new area?
+    new_area->vma_obj = mobj;
     
     // set up shadow object if needed
     mobj_t* shadow = NULL;
     if (flags & MAP_PRIVATE) {
         shadow = shadow_create(mobj);
-        new_area->vma_obj = shadow; // QUESTION: Should I be putting the actual mobj and making the area point to the shadow like this?
+        new_area->vma_obj = shadow;
         KASSERT(mobj->mo_refcount);
         mobj_put(&mobj);
         if (!shadow) {
@@ -405,13 +405,13 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
 {
     KASSERT(npages > 0);
     size_t endpage = lopage + npages;
+    uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
+    uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage);
     list_iterate(&map->vmm_list, area, vmarea_t, vma_plink) {
         if (area->vma_start >= lopage && area->vma_end > endpage && endpage > area->vma_start) {
             size_t old_start = area->vma_start;
             area->vma_start = endpage;
             area->vma_off += area->vma_start - old_start;
-            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(endpage);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
@@ -431,8 +431,6 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
             new_area->vma_vmmap = map;
             area->vma_end = lopage;
             vmmap_insert(map, new_area);
-            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(area->vma_start);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(new_area->vma_end);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
@@ -440,16 +438,12 @@ long vmmap_remove(vmmap_t *map, size_t lopage, size_t npages)
         } else if (area->vma_start < lopage && area->vma_end > lopage && area->vma_end <= endpage) {
             size_t old_end = area->vma_end;
             area->vma_end = lopage;
-            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(lopage);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(old_end);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
             pt_unmap_range(map->vmm_proc->p_pml4, vaddr, vmax);
             tlb_flush_range(vaddr, vmax - vaddr);
         } else if (area->vma_start >= lopage && area->vma_end <= endpage) {
             list_remove(&area->vma_plink);
-            uintptr_t vaddr = (uintptr_t) PN_TO_ADDR(area->vma_start);
-            uintptr_t vmax = (uintptr_t) PN_TO_ADDR(area->vma_end);
             vmarea_free(area);
             KASSERT(vmax > vaddr);
             KASSERT(PAGE_ALIGNED(vaddr) && PAGE_ALIGNED(vmax));
