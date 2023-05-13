@@ -98,9 +98,9 @@ mobj_t *shadow_create(mobj_t *shadowed)
 void shadow_collapse(mobj_t *o)
 {
     mobj_shadow_t* shadow = MOBJ_TO_SO(o);
-    mobj_t* current = o;
+    mobj_t* current = shadow->shadowed;
     while (current != NULL && shadow->shadowed->mo_type == MOBJ_SHADOW) {
-        shadow = MOBJ_TO_SO(current);
+        // shadow = MOBJ_TO_SO(current); // Maybe uncomment this, but I don't think so
         if (shadow->shadowed->mo_refcount == 1) {
             mobj_lock(shadow->shadowed);
             list_iterate(&shadow->shadowed->mo_pframes, frame, pframe_t, pf_link) {
@@ -108,8 +108,8 @@ void shadow_collapse(mobj_t *o)
                 mobj_lock(current);
                 mobj_find_pframe(current, frame->pf_pagenum, &found);
                 mobj_unlock(current);
-                list_remove(&frame->pf_link);
                 if (!found) {
+                    list_remove(&frame->pf_link);
                     list_insert_tail(&current->mo_pframes, &frame->pf_link);
                 } else {
                     pframe_release(&found);
@@ -120,8 +120,9 @@ void shadow_collapse(mobj_t *o)
             shadow->shadowed = sub_shadow->shadowed;
             KASSERT(pointer_to_removed->mo_refcount);
             mobj_put_locked(&pointer_to_removed);
-        }
-        current = shadow->shadowed;
+        } else {
+            current = shadow->shadowed;
+        }  
     }
 }
 
@@ -270,6 +271,6 @@ static void shadow_destructor(mobj_t *o)
     KASSERT(shadow->shadowed->mo_refcount);
     mobj_put(&shadow->shadowed);
     // KASSERT(shadow->bottom_mobj->mo_refcount);
-    // mobj_put(&shadow->bottom_mobj);
+    mobj_put(&shadow->bottom_mobj);
     slab_obj_free(shadow_allocator, shadow);
 }

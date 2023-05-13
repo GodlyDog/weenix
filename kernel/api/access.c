@@ -117,7 +117,9 @@ long user_vecdup(argvec_t *uvec, char ***kvecp)
 long addr_perm(proc_t *p, const void *vaddr, int perm)
 {
     vmarea_t* area = vmmap_lookup(p->p_vmmap, ADDR_TO_PN(vaddr));
-    KASSERT(area); // QUESTION: This should always be guaranteed right?
+    if (!area) {
+        return 0;
+    }
     if (perm & area->vma_prot) {
         return 1;
     } else {

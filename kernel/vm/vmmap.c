@@ -236,14 +236,12 @@ vmmap_t *vmmap_clone(vmmap_t *map)
             mobj_unlock(area->vma_obj);
             mobj_unlock(new_shadow);
             if (!new_shadow) {
-                shadow_collapse(area->vma_obj);
                 vmmap_destroy(&new_map);
                 return NULL;
             }
             mobj_t* old_shadow = shadow_create(area->vma_obj);
             mobj_unlock(old_shadow);
             if (!old_shadow) {
-                shadow_collapse(area->vma_obj);
                 vmmap_destroy(&new_map);
                 return NULL;
             }
@@ -323,7 +321,11 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
         mobj = anon_create();
         mobj_unlock(mobj);
     } else {
-        file->vn_ops->mmap(file, &mobj);
+        long status = file->vn_ops->mmap(file, &mobj);
+        if (status < 0) {
+            vmarea_free(new_area);
+            return status;
+        }
     }
     if (!mobj) {
         vmarea_free(new_area);

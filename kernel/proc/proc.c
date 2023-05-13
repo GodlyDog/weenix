@@ -259,8 +259,8 @@ void proc_cleanup(long status)
         do_close(fd);
     }
     vput(&curproc->p_cwd);
+    vmmap_destroy(&curproc->p_vmmap);
     if (curproc->p_pid == PID_INIT) {
-        vmmap_destroy(&curproc->p_vmmap);
         initproc_finish();
     } else {
         list_iterate(&curproc->p_children, child, proc_t, p_child_link) {

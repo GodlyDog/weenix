@@ -145,6 +145,7 @@ static long sys_getdents(getdents_args_t *args)
     while(arguments.count > (num_read * sizeof(dirent_t))) {
         dirent_t dirp;
         ssize_t read = do_getdent(arguments.fd, &dirp);
+        ERROR_OUT_RET(read);
         if (read != sizeof(dirent_t)) {
             return num_read * sizeof(dirent_t);
         }

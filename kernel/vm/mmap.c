@@ -79,7 +79,7 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
     }
 
     // the EBADF case
-    if (!file && !(flags & MAP_ANON)) {
+    if (!file && !(flags & MAP_ANON) && (flags & MAP_FIXED)) {
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EBADF;
     }
@@ -149,10 +149,16 @@ long do_munmap(void *addr, size_t len)
     if (!PAGE_ALIGNED(addr)) {
         return -EINVAL;
     }
-    if (len == 0) {
+    if (len <= 0) {
         return -EINVAL;
     }
     if ((uintptr_t) addr < USER_MEM_LOW) {
+        return -EINVAL;
+    }
+    if ((uintptr_t) addr > USER_MEM_HIGH) {
+        return -EINVAL;
+    }
+    if (len > USER_MEM_HIGH) {
         return -EINVAL;
     }
     if ((uintptr_t) addr + len > USER_MEM_HIGH) {
