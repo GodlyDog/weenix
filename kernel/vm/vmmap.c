@@ -349,7 +349,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     }
 
     // remove mappings in the specified range if MAP_FIXED is set
-    if (((flags & MAP_FIXED) != 0) && (lopage != 0)) {
+    if ((flags & MAP_FIXED) && (lopage)) {
         long status = vmmap_remove(map, lopage, npages);
         if (status < 0) {
             vmarea_free(new_area);

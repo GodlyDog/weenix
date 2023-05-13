@@ -800,15 +800,15 @@ int main(int argc, char **argv)
     test_init();
     make_rootdir();
     syscall_success(chdir(root_dir));
-    //childtest(test_overflow);
+    childtest(test_overflow);
     childtest(test_mmap_bounds);
-    //childtest(test_brk_bounds);
-    //childtest(test_munmap);
-    //childtest(test_start_brk);
-    //childtest(test_brk_mmap);
+    childtest(test_brk_bounds);
+    childtest(test_munmap);
+    childtest(test_start_brk);
+    childtest(test_brk_mmap);
     //    childtest(test_mmap_fill); // [+] TODO UPDATE FOR 64 BIT
-    //childtest(test_mmap_repeat);
-    //childtest(test_mmap_beyond);
+    childtest(test_mmap_repeat);
+    childtest(test_mmap_beyond);
     syscall_success(chdir(".."));
     destroy_rootdir();
     test_fini();
