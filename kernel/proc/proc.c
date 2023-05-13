@@ -287,7 +287,7 @@ void proc_cleanup(long status)
 void proc_thread_exiting(void *retval)
 {
     proc_cleanup((long)retval);
-    curthr->kt_retval = retval;
+    //curthr->kt_retval = retval;
     curthr->kt_state = KT_EXITED;
     sched_broadcast_on(&curproc->p_pproc->p_wait);
     sched_switch(0, 0);
@@ -320,8 +320,7 @@ void proc_kill_all()
 {
     spinlock_lock(&proc_list_lock);
     list_iterate(&proc_list, p, proc_t, p_list_link) {
-        proc_t* parent = list_item(&p->p_child_link, proc_t, p_child_link);
-        if (p->p_pid != curproc->p_pid && parent->p_pid != PID_IDLE) {
+        if (p->p_pid != curproc->p_pid && curproc->p_pproc != PID_IDLE) {
             proc_kill(p, -1);
         }
     }

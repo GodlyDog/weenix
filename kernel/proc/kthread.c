@@ -172,7 +172,6 @@ void kthread_cancel(kthread_t *thr, void *retval)
 {
     KASSERT(thr != curthr);
     spinlock_lock(&thr->kt_lock);
-    thr -> kt_retval = retval;
     spinlock_unlock(&thr->kt_lock);
     sched_cancel(thr);
 }
@@ -182,6 +181,6 @@ void kthread_cancel(kthread_t *thr, void *retval)
  */
 void kthread_exit(void *retval)
 {
-    curthr->kt_retval = retval;
+    //curthr->kt_retval = retval;
     proc_thread_exiting(retval);
 }

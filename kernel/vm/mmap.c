@@ -57,7 +57,7 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
 {
     dbg(DBG_TEST, "\nSTARTING DO_MMAP\n");
     // all EINVAL cases
-    if (len <= 0 || off < 0) {
+    if ((int) len <= 0 || off < 0) {
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
@@ -73,8 +73,11 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
+    if (((uintptr_t) addr < USER_MEM_LOW) && (flags & MAP_FIXED)) {
+        return -EINVAL;
+    }
     file_t* file = NULL;
-    if (fd >= 0) {
+    if ((int) fd >= 0) {
         file = curproc->p_files[fd];
     }
 
