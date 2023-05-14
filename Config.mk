@@ -14,7 +14,7 @@
          VFS=1
         S5FS=1
           VM=1
-     DYNAMIC=0
+     DYNAMIC=1
 # When you finish S5FS, first enable "VM"; once this is working, then enable
 # "DYNAMIC".
 
@@ -63,7 +63,7 @@
 
 # Parameters for the hard disk we build (must be compatible!)
 # If the FS is too big for the disk, BAD things happen!
-        DISK_BLOCKS=2048 # For fsmaker
+        DISK_BLOCKS=3072 # For fsmaker
         DISK_INODES=240  # For fsmaker
 
 # Boolean options specified in this specified in this file that should be

@@ -177,8 +177,8 @@ static int test_brk_bounds(void)
     test_assert('\0' == *((char *)newbrk - 1), NULL);
     *((char *)newbrk - 1) = 'a';
 
-    assert_fault(char foo = *(char *)newbrk, "");
-    assert_fault(*(char *)newbrk = 'a', "");
+    assert_fault(char foo = *(char *)newbrk, ""); // failing
+    assert_fault(*(char *)newbrk = 'a', ""); // failing
 
     /* Move brk up by 1 byte */
     test_assert(0 == brk((char *)newbrk + 1), NULL);
