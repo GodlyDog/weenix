@@ -70,7 +70,10 @@ long do_brk(void *addr, void **ret)
         return -ENOMEM;
     }
     size_t lopage = ADDR_TO_PN(PAGE_ALIGN_UP(curproc->p_start_brk));
-    size_t endpage = ADDR_TO_PN(PAGE_ALIGN_UP(addr)) + 1;
+    size_t endpage = ADDR_TO_PN(PAGE_ALIGN_UP(addr));
+    if (endpage == lopage) {
+        endpage += 1;
+    }
     if (curproc->p_brk == curproc->p_start_brk) {
         // create a heap
         dbg(DBG_TEST, "\nCREATING HEAP\n");
@@ -82,7 +85,7 @@ long do_brk(void *addr, void **ret)
         if (status < 0) {
             return status;
         }
-        curproc->p_brk = PAGE_ALIGN_UP(addr);
+        curproc->p_brk = addr;
         if (ret) {
             *ret = curproc->p_brk;
         }
@@ -100,7 +103,7 @@ long do_brk(void *addr, void **ret)
                 return -ENOMEM;
             }
             heap->vma_end = endpage;
-            curproc->p_brk = PAGE_ALIGN_UP(addr);
+            curproc->p_brk = addr;
             if (ret) {
                 *ret = curproc->p_brk;
             }
@@ -110,7 +113,7 @@ long do_brk(void *addr, void **ret)
             // shrink heap
             dbg(DBG_TEST, "\nSHRINKING HEAP\n");
             vmmap_remove(curproc->p_vmmap, endpage, heap->vma_end - endpage);
-            curproc->p_brk = PAGE_ALIGN_UP(addr);
+            curproc->p_brk = addr;
             if (ret) {
                 *ret = curproc->p_brk;
             }
