@@ -391,6 +391,11 @@ long do_link(const char *oldpath, const char *newpath)
         vput(&old_res);
         return status;
     }
+    if (strlen(new_name) > NAME_LEN) {
+        vput(&old_res);
+        vput(&directory_res);
+        return -ENAMETOOLONG;
+    }
     if (!S_ISDIR(directory_res->vn_mode)) {
         vput(&old_res);
         vput(&directory_res);

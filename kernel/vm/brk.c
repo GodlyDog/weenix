@@ -75,8 +75,25 @@ long do_brk(void *addr, void **ret)
         endpage += 1;
     }
     if (curproc->p_brk == curproc->p_start_brk) {
+        if (ADDR_TO_PN(addr) == ADDR_TO_PN(curproc->p_start_brk)) {
+            if (ret) {
+                *ret = curproc->p_brk;
+            }
+            return 0;
+        } else if (PAGE_ALIGNED(addr)) {
+            if (ADDR_TO_PN(addr) - 1 == ADDR_TO_PN(curproc->p_start_brk)) {
+                if (ret) {
+                    *ret = curproc->p_brk;
+                }
+                return 0;
+            }
+        }
         // create a heap
         dbg(DBG_TEST, "\nCREATING HEAP\n");
+        if (ADDR_TO_PN(curproc->p_start_brk) == ADDR_TO_PN(addr)) {
+            lopage -= 1;
+            endpage -=1;
+        }
         if (!vmmap_is_range_empty(curproc->p_vmmap, lopage, endpage - lopage)) {
             return -ENOMEM;
         }

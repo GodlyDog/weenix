@@ -585,7 +585,7 @@ void s5_remove_dirent(s5_node_t *sn, const char *name, size_t namelen,
     s5_read_file(sn, sn->vnode.vn_len - sizeof(s5_dirent_t), (char *) &end, sizeof(s5_dirent_t));
     sn->vnode.vn_len -= sizeof(s5_dirent_t);
     sn->inode.s5_un.s5_size -= sizeof(s5_dirent_t);
-    if (ino != end.s5d_inode) {
+    if (!name_match(end.s5d_name, name, namelen)) {
         s5_write_file(sn, write_position, (char *) &end, sizeof(s5_dirent_t));
     }
     child->inode.s5_linkcount -= 1;

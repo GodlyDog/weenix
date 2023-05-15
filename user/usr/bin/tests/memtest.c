@@ -808,7 +808,7 @@ int main(int argc, char **argv)
     childtest(test_brk_mmap);
     //    childtest(test_mmap_fill); // [+] TODO UPDATE FOR 64 BIT
     childtest(test_mmap_repeat);
-    //childtest(test_mmap_beyond);
+    childtest(test_mmap_beyond);
     syscall_success(chdir(".."));
     destroy_rootdir();
     test_fini();

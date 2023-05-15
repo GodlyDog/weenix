@@ -83,6 +83,9 @@ static long sys_read(read_args_t *args)
     }
     ret = do_read(arguments.fd, buffer, arguments.nbytes);
     ssize_t bytes_read = ret;
+    if (bytes_read == 0) {
+        return 0;
+    }
     ERROR_OUT_RET(ret);
     ret = copy_to_user(arguments.buf, buffer, arguments.nbytes);
     ERROR_OUT_RET(ret);

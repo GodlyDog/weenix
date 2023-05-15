@@ -57,7 +57,7 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
 {
     dbg(DBG_TEST, "\nSTARTING DO_MMAP\n");
     // all EINVAL cases
-    if ((int) len <= 0 || off < 0) {
+    if ((int) len <= 0 || (int) off < 0) {
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return -EINVAL;
     }
@@ -79,6 +79,11 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
     file_t* file = NULL;
     if ((int) fd >= 0) {
         file = curproc->p_files[fd];
+        if (!file) {
+            return -EBADF;
+        }
+    } else if (!(flags & MAP_ANON)) {
+        return -EBADF;
     }
 
     // the EBADF case
@@ -109,6 +114,10 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
             dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
             return -EACCES;
         }
+        if (!(file->f_mode & FMODE_WRITE) && (prot & PROT_WRITE) && (flags & MAP_SHARED)) {
+            dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
+            return -EACCES;
+        }
     }
     size_t lopage = ADDR_TO_PN(PAGE_ALIGN_DOWN(addr));
     size_t npages = ADDR_TO_PN(PAGE_ALIGN_UP((uintptr_t) addr + len)) - lopage;
@@ -122,7 +131,9 @@ long do_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off,
         dbg(DBG_TEST, "\nDO_MMAP FAILED\n");
         return status;
     }
+    dbg(DBG_TEST, "\nFLUSHING RANGE\n");
     tlb_flush_range((uintptr_t) PN_TO_ADDR(new_vma->vma_start), (new_vma->vma_end - new_vma->vma_start) * PAGE_SIZE);
+    dbg(DBG_TEST, "\nFINSIHED FLUSHING RANGE\n");
     if (ret) {
         *ret = PN_TO_ADDR(new_vma->vma_start);
     }

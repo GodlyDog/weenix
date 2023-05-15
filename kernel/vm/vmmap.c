@@ -296,6 +296,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
                int prot, int flags, off_t off, int dir, vmarea_t **new_vma)
 {
     // set up the new vmarea_t
+    dbg(DBG_TEST, "\nENTERING VMMAP_MAP\n");
     size_t start = lopage;
     if (!lopage) {
         start = vmmap_find_range(map, npages, dir);
@@ -324,11 +325,13 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
         long status = file->vn_ops->mmap(file, &mobj);
         if (status < 0) {
             vmarea_free(new_area);
+            dbg(DBG_TEST, "\nERRORING VMMAP_MAP\n");
             return status;
         }
     }
     if (!mobj) {
         vmarea_free(new_area);
+        dbg(DBG_TEST, "\nERRORING VMMAP_MAP\n");
         return -ENOMEM;
     }
 
@@ -343,6 +346,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
         mobj_put(&mobj);
         if (!shadow) {
             vmarea_free(new_area);
+            dbg(DBG_TEST, "\nERRORING VMMAP_MAP\n");
             return -ENOMEM;
         }
         mobj_unlock(shadow);
@@ -360,6 +364,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
                 KASSERT(mobj->mo_refcount);
                 mobj_put(&mobj);
             }
+            dbg(DBG_TEST, "\nFINISHING VMMAP_MAP\n");
             return status;
         }
     }
@@ -367,6 +372,7 @@ long vmmap_map(vmmap_t *map, vnode_t *file, size_t lopage, size_t npages,
     if (new_vma) {
         *new_vma = new_area;
     }
+    dbg(DBG_TEST, "\nFINISHING VMMAP_MAP\n");
     return 0;
 }
 
