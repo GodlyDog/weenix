@@ -71,10 +71,23 @@ long do_brk(void *addr, void **ret)
     }
     size_t lopage = ADDR_TO_PN(PAGE_ALIGN_UP(curproc->p_start_brk));
     size_t endpage = ADDR_TO_PN(PAGE_ALIGN_UP(addr));
-    if (endpage == lopage) {
-        endpage += 1;
+    if (endpage == lopage) { // should be removing heap
+        if (curproc->p_brk == curproc->p_start_brk) {
+            endpage += 1;
+        } else {
+            vmarea_t* heap = vmmap_lookup(curproc->p_vmmap, ADDR_TO_PN(PAGE_ALIGN_UP(curproc->p_start_brk)));
+            KASSERT(heap);
+            vmmap_remove(curproc->p_vmmap, heap->vma_start, heap->vma_end - heap->vma_start);
+            curproc->p_brk = curproc->p_start_brk;
+            if (ret) {
+                *ret = curproc->p_brk;
+            }
+            dbg(DBG_TEST, "\nFINISHED DO_BRK\n");
+            return 0;
+        }
+        
     }
-    if (curproc->p_brk == curproc->p_start_brk) {
+    if (curproc->p_brk == curproc->p_start_brk) { // if heap unallocated
         if (ADDR_TO_PN(addr) == ADDR_TO_PN(curproc->p_start_brk)) {
             if (ret) {
                 *ret = curproc->p_brk;

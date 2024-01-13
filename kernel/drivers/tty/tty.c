@@ -78,6 +78,7 @@ ssize_t tty_read(chardev_t *cdev, size_t pos, void *buf, size_t count)
     kmutex_lock(&tty->tty_read_mutex);
     long stat = ldisc_wait_read(&tty->tty_ldisc, &tty->tty_lock);
     if (stat < 0) {
+        kmutex_unlock(&tty->tty_read_mutex);
         intr_setipl(current_ipl);
         spinlock_unlock(&tty->tty_lock);
         return stat;

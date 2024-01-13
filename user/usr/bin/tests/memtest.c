@@ -347,10 +347,17 @@ static int test_start_brk(void)
 
     /* Move back to starting brk */
     test_assert(0 == brk((char *)bss_end + 1), NULL);
+    printf("Brk is at address: %p\n", sbrk(0));
+    printf("oldbrk is at address: %p\n", oldbrk);
+    printf("newbrk is at address: %p\n", newbrk);
+    printf("bss_end is at address: %p\n", bss_end);
     /* Make sure region is gone */
     test_assert('b' == *(oldbrk - 1), NULL);
-    assert_fault(char foo = *oldbrk, "");
+    assert_fault(char foo = *oldbrk, ""); // Unexpected lack of segfault on char foo = *oldbrk
+    assert_fault(char foo = *(oldbrk+1), ""); // Unexpected lack of segfault on char foo = *(oldbrk + 1)
     assert_fault(char foo = *newbrk, "");
+    assert_fault(char foo = *(newbrk - 1), ""); // Unexpected lack of segfault on char foo = *(newbrk - 1)
+    assert_fault(char foo = *(newbrk + 1), "");
 
     /* Move it up, make sure we have new clean region */
     test_assert(0 == brk(oldbrk + 1), NULL);

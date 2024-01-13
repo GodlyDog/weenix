@@ -47,7 +47,7 @@
         RENAMEDIR=0
 
 # Set the number of terminals that we should be launching.
-        NTERMS=1
+        NTERMS=3
 
 # Set the number of disks that we should be launching with
         NDISKS=1
