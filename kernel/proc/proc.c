@@ -260,6 +260,12 @@ void proc_cleanup(long status)
     vput(&curproc->p_cwd);
     vmmap_destroy(&curproc->p_vmmap);
     if (curproc->p_pid == PID_INIT) {
+        if (!list_empty(&curproc->p_children)) {
+            // clean up orphaned processes in the event that init process must shut down
+            int status = 0;
+            while (do_waitpid(-1, &status, 0) != -ECHILD) // what if a child process refuses to exit? won't this hang?
+                ;
+        }
         initproc_finish();
     } else {
         list_iterate(&curproc->p_children, child, proc_t, p_child_link) {
