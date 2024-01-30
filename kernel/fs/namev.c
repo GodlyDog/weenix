@@ -352,7 +352,7 @@ long namev_resolve(vnode_t *base, const char *path, vnode_t **res_vnode)
 }
 
 #ifdef __GETCWD__
-/* Finds the name of 'entry' in the directory 'dir'. The name is writen
+/* Finds the name of 'entry' in the directory 'dir'. The name is written
  * to the given buffer. On success 0 is returned. If 'dir' does not
  * contain 'entry' then -ENOENT is returned. If the given buffer cannot
  * hold the result then it is filled with as many characters as possible
@@ -362,13 +362,44 @@ long namev_resolve(vnode_t *base, const char *path, vnode_t **res_vnode)
  * inode numbers. */
 int lookup_name(vnode_t *dir, vnode_t *entry, char *buf, size_t size)
 {
-    NOT_YET_IMPLEMENTED("GETCWD: lookup_name");
-    return -ENOENT;
+    dirent_t ent;
+    ssize_t position = 0;
+    vlock(dir);
+    vlock(entry);
+    ssize_t next_bytes = dir->vn_ops->readdir(dir, position, &ent);
+    while (ent.d_ino != entry->vn_vno) {
+        if (next_bytes == 0) {
+            vunlock(dir);
+            vunlock(entry);
+            return -ENOENT;
+        }
+        if (next_bytes < 0) {
+            vunlock(dir);
+            vunlock(entry);
+            return -ENOENT;
+        }
+        next_bytes = dir->vn_ops->readdir(dir, position, &ent);
+        position = position + next_bytes
+    }
+    int i = 0;
+    while ((char character = ent.d_name[i]) != '\0' && i < NAME_LEN) {
+        if (i == size) {
+            buf[i-1] = '\0';
+            vunlock(dir);
+            vunlock(entry);
+            return -ERANGE;
+        }
+        buf[i] = character;
+        i++;
+    }
+    vunlock(dir);
+    vunlock(entry);
+    return 0;
 }
 
 /* Used to find the absolute path of the directory 'dir'. Since
  * directories cannot have more than one link there is always
- * a unique solution. The path is writen to the given buffer.
+ * a unique solution. The path is written to the given buffer.
  * On success 0 is returned. On error this function returns a
  * negative error code. See the man page for getcwd(3) for
  * possible errors. Even if an error code is returned the buffer
@@ -376,8 +407,39 @@ int lookup_name(vnode_t *dir, vnode_t *entry, char *buf, size_t size)
  * information about the wanted path. */
 ssize_t lookup_dirpath(vnode_t *dir, char *buf, size_t osize)
 {
-    NOT_YET_IMPLEMENTED("GETCWD: lookup_dirpath");
-
-    return -ENOENT;
+    size_t count = 0;
+    vnode_t* current = vfs_root_fs.fs_root;
+    dirent_t ent;
+    vlock(current);
+    size_t position = 0;
+    ssize_t next_bytes = dir->vn_ops->readdir(current, position, &ent);
+    position = position + next_bytes;
+    while (ent.d_ino != dir->vn_vno) {
+        vunlock(current);
+        if (next_bytes == 0) {
+            return -ENOENT;
+        }
+        if (next_bytes < 0) {
+            return -ENOENT;
+        }
+        vnode_t* entry = vget(dir->vn_fs, ent.d_ino, 0);
+        if (namev_is_descendant(dir, entry)) {
+            // unlock the entry vnode, unlock current vnode
+            int status = lookup_name(current, entry, buf + count, osize - count);
+            if (status < 0) {
+                return status;
+            }
+            current = entry;
+            position = 0;
+            vlock(current);
+            next_bytes = dir->vn_ops->readdir(current, position, &ent);
+            position = position + next_bytes;
+        } else {
+            vlock(current);
+            next_bytes = dir->vn_ops->readdir(current, position, &ent);
+            position = position + next_bytes
+        }
+    }
+    
 }
 #endif /* __GETCWD__ */
